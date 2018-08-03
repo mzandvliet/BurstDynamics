@@ -5,8 +5,11 @@ using Unity.Jobs;
 using Unity.Burst;
 
 /* Todo:
+ Clarify connection between Newtonian dynamics, the math, and this code
  - Make time a factor
  - Interface for acceleration
+
+ Computational:
  - Figure out how to interact points and sticks without cache trashing
  */
 
