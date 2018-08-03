@@ -35,27 +35,41 @@ public struct UpdatePointsJob : IJob {
 
 			p.Last = p.Now;
             p.Now = p.Now + v * friction;
-
 			p.Now += g;
-
-            if (p.Now.x > box) {
-                p.Now.x = box;
-				p.Last.x = p.Now.x + v.x;
-            } else if (p.Now.x < -box) {
-                p.Now.x = -box;
-                p.Last.x = p.Now.x + v.x;
-			}
-            else if (p.Now.y > box) {
-                p.Now.y = box;
-                p.Last.y = p.Now.y + v.y;
-            } else if (p.Now.y < -box) {
-                p.Now.y = -box;
-                p.Last.y = p.Now.y + v.y;
-            }
 
 			Points[i] = p;
 		}
 	}
+}
+
+[BurstCompile]
+public struct ConstrainPointsJob : IJob {
+    public NativeArray<Point> Points;
+
+    public void Execute() {
+        float2 box = new float2(20f, 10f);
+
+        for (int i = 0; i < Points.Length; i++) {
+            Point p = Points[i];
+			float2 v = p.Now - p.Last;
+
+            if (p.Now.x > box.x) {
+                p.Now.x = box.x;
+                p.Last.x = p.Now.x + v.x;
+            } else if (p.Now.x < -box.x) {
+                p.Now.x = -box.x;
+                p.Last.x = p.Now.x + v.x;
+            } else if (p.Now.y > box.x) {
+                p.Now.y = box.y;
+                p.Last.y = p.Now.y + v.y;
+            } else if (p.Now.y < -box.y) {
+                p.Now.y = -box.y;
+                p.Last.y = p.Now.y + v.y;
+            }
+
+            Points[i] = p;
+        }
+    }
 }
 
 public class Blob : MonoBehaviour {
@@ -78,9 +92,15 @@ public class Blob : MonoBehaviour {
 	}
 
 	private void Update() {
-		var j = new UpdatePointsJob();
-		j.Points = _points;
-		var h = j.Schedule();
+		var h = new JobHandle();
+
+		h = new UpdatePointsJob() {
+			Points = _points
+		}.Schedule();
+		h = new ConstrainPointsJob() {
+			Points = _points
+		}.Schedule(h);
+
 		h.Complete();
 	}
 
