@@ -37,6 +37,8 @@ public static class ComplexI {
     Using only multiplication and integers means that
     you can't have orbits that shrink, just a few
     that stay constant, or explode.
+
+    Todo: try fixed point arithmetic!
  */
 
 public class ComplexInts : MonoBehaviour {

@@ -11,6 +11,10 @@ using Unity.Burst;
 
  Computational:
  - Figure out how to interact points and sticks without cache trashing
+ - Can parallelize UpdatePoints and CollidePoints easily. Sticks too,
+ but only when parallely processed sticks don't share points.
+        - Sticks forming a single box, hmm..
+        - But sticks from separate non-interacting boxes are fine.
  */
 
 public struct Point {
