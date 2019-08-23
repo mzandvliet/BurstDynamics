@@ -1,7 +1,3 @@
-*.csproj
-.vscode/
-*.sln
-Library/
-obj/
-Temp/
-Logs/
+version https://git-lfs.github.com/spec/v1
+oid sha256:7af214191c78bd6f52a7990d05654c988d6feb017535ed918bef5168954150ed
+size 96
