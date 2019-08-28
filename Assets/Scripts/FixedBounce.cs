@@ -186,11 +186,16 @@ public class FixedBounce : MonoBehaviour {
 
     // private static readonly vscalar deltaTime = new vscalar(24);
 
+    private double _movingAvg;
+
     private void Update() {
-        var frictionMul = vscalar.One - vscalar.Epsilon;
-        var frictionDiv = vscalar.One + vscalar.Epsilon * 4;
+        var frictionMul = vscalar.One - vscalar.Epsilon * 4;
+        var frictionDiv = vscalar.One + vscalar.Epsilon * 1;
         // var frictionMul = scalar.FromFloat(0.9f);
         // var frictionDiv = scalar.FromFloat(1.1f);
+
+        double avgNudgeX = 0;
+        double avgVelStepX = 0;
 
         for (int i = 0; i < _particles.Length; i++) {
             var p = _particles[i];
@@ -199,22 +204,30 @@ public class FixedBounce : MonoBehaviour {
                 new vscalar((sbyte)_rng.NextInt(-3, 4)),
                 new vscalar((sbyte)_rng.NextInt(-3, 4)));
 
+            avgNudgeX += nudge.x.v;
+
             p.velocity.x += nudge.x;
             p.velocity.y += nudge.y;
 
-            // p.velocity *= frictionMul; // Nope...
-
             // bug: division doesn't round properly, causing a biased motion to bottom left
-            p.velocity.x /= frictionDiv;
-            p.velocity.y /= frictionDiv;
+            // p.velocity.x *= frictionMul;
+            // p.velocity.y *= frictionMul;
 
-            var scaledVelocity = new velocity(p.velocity.x, p.velocity.y);
+            // p.velocity.x /= frictionDiv;
+            // p.velocity.y /= frictionDiv;
+
+            var scaledVelocity = new velocity(p.velocity.x >> 2, p.velocity.y >> 2);
+            avgVelStepX += vscalar.ToDouble(scaledVelocity.x);
 
             p.position.x += scaledVelocity.x;
             p.position.y += scaledVelocity.y;
 
             _particles[i] = p;
         }
+
+        // _movingAvg = math.lerp(_movingAvg, avgNudgeX / (double)_particles.Length, 0.01f);
+        _movingAvg = math.lerp(_movingAvg, avgVelStepX / (double)_particles.Length, 0.01f);
+        Debug.Log(_movingAvg);
     }
 
     private void OnDrawGizmos() {
