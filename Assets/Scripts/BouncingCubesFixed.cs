@@ -46,25 +46,49 @@ public class BouncingCubesFixed : MonoBehaviour {
         int pointIdx = idx * PointsPerCube;
         int stickIdx = idx * SticksPerCube;
 
+        vec2_qs15_16 cornerPos;
+        vec2_qs15_16 cornerPosOffset;
+
+        const float _spawnImpulse = 0.3f;
+
+        cornerPos = pos + vec2_qs15_16.FromInt(0, 0);
+        cornerPosOffset = vec2_qs15_16.FromFloat(
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 0] = new Point
         {
-            Last = pos + vec2_qs15_16.FromInt(0, 0),
-            Now = pos + vec2_qs15_16.FromInt(0, 0)
+            Last = cornerPos,
+            Now = cornerPos + cornerPosOffset
         };
+
+        cornerPos = pos + vec2_qs15_16.FromInt(0, 1);
+        cornerPosOffset = vec2_qs15_16.FromFloat(
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 1] = new Point
         {
-            Last = pos + vec2_qs15_16.FromInt(0, 1),
-            Now = pos + vec2_qs15_16.FromInt(0, 1)
+            Last = cornerPos,
+            Now = cornerPos + cornerPosOffset
         };
+
+        cornerPos = pos + vec2_qs15_16.FromInt(1, 1);
+        cornerPosOffset = vec2_qs15_16.FromFloat(
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 2] = new Point
         {
-            Last = pos + vec2_qs15_16.FromInt(1, 1),
-            Now = pos + vec2_qs15_16.FromInt(1, 1)
+            Last = cornerPos,
+            Now = cornerPos + cornerPosOffset
         };
+
+        cornerPos = pos + vec2_qs15_16.FromInt(1, 0);
+        cornerPosOffset = vec2_qs15_16.FromFloat(
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
+            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 3] = new Point
         {
-            Last = pos + vec2_qs15_16.FromInt(1, 0),
-            Now = pos + vec2_qs15_16.FromInt(1, 0)
+            Last = cornerPos,
+            Now = cornerPos + cornerPosOffset
         };
 
 
@@ -173,8 +197,8 @@ public class BouncingCubesFixed : MonoBehaviour {
         public NativeArray<Point> Points;
 
         public void Execute() {
-            qs15_16 friction = qs15_16.One - qs15_16.Epsilon;
-            vec2_qs15_16 g = vec2_qs15_16.FromFloat(0f, -0.01f);
+            qs15_16 friction = qs15_16.One - qs15_16.Epsilon * (512 * 2);
+            vec2_qs15_16 g = vec2_qs15_16.FromFloat(0f, -0.005f);
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];
@@ -196,7 +220,7 @@ public class BouncingCubesFixed : MonoBehaviour {
         public void Execute() {
             vec2_qs15_16 box = vec2_qs15_16.FromFloat(20f, 10f);
 
-            qs15_16 restitution = qs15_16.FromFloat(0.75f);
+            qs15_16 restitution = qs15_16.FromFloat(0.8f);
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];
@@ -243,6 +267,9 @@ public class BouncingCubesFixed : MonoBehaviour {
                 /* Todo: 
                 - Can we find a more physically meaningful derivation of forces along
                 the edges? Also, either without sqrt, or with a fixed-point sqrt
+
+                - Stability: the squish value is unstable, can easily get into some
+                range where the sim explodes.
 
                 - Next, can we choose our fixed point types through the computation
                 such that every step of the way we make good tradeoffs between
