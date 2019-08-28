@@ -24,7 +24,7 @@ public class BouncingCubesFixed : MonoBehaviour {
     private NativeArray<Point> _points;
     private NativeArray<Stick> _sticks;
 
-    private const int NumCubes = 1024;
+    private const int NumCubes = 128;
     private const int PointsPerCube = 4;
     private const int SticksPerCube = 6;
 
@@ -121,11 +121,13 @@ public class BouncingCubesFixed : MonoBehaviour {
         {
             Points = _points
         }.Schedule(_updateHandle);
+
         _updateHandle = new UpdateSticksJob
         {
             Points = _points,
             Sticks = _sticks
         }.Schedule(_updateHandle);
+
         _updateHandle = new CollidePointsJob
         {
             Points = _points
@@ -194,26 +196,13 @@ public class BouncingCubesFixed : MonoBehaviour {
         public void Execute() {
             vec2_qs15_16 box = vec2_qs15_16.FromFloat(20f, 10f);
 
-            qs15_16 restitution = qs15_16.FromFloat(0.9f);
+            qs15_16 restitution = qs15_16.FromFloat(0.75f);
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];
                 vec2_qs15_16 v = p.Now - p.Last;
 
                 // Todo: -box.x syntax
-                // if (p.Now.x > box.x) {
-                //     p.Now.x = box.x;
-                //     p.Last.x = p.Now.x + v.x * restitution;
-                // } else if (p.Now.x < -box.x) {
-                //     p.Now.x = -box.x;
-                //     p.Last.x = p.Now.x + v.x * restitution;
-                // } else if (p.Now.y > box.x) {
-                //     p.Now.y = box.y;
-                //     p.Last.y = p.Now.y + v.y * restitution;
-                // } else if (p.Now.y < -box.y) {
-                //     p.Now.y = -box.y;
-                //     p.Last.y = p.Now.y + v.y * restitution;
-                // }
 
                 if (p.Now.x > box.x) {
                     p.Now.x = box.x;
@@ -252,14 +241,27 @@ public class BouncingCubesFixed : MonoBehaviour {
                 Point b = Points[s.B];
 
                 /* Todo: 
-                Can we find a more physically meaningful derivation of forces along
+                - Can we find a more physically meaningful derivation of forces along
                 the edges? Also, either without sqrt, or with a fixed-point sqrt
+
+                - Next, can we choose our fixed point types through the computation
+                such that every step of the way we make good tradeoffs between
+                range and precision?
+
+                - Finally, can we make some simple tools that help us figure those
+                things out?
                 */
+
+                // vec2_qs15_16 delta = a.Now - b.Now;
+                // float displacement = math.sqrt(qs15_16.ToFloat(delta.x) * qs15_16.ToFloat(delta.x) + qs15_16.ToFloat(delta.y) * qs15_16.ToFloat(delta.y));
+                // float diff = qs15_16.ToFloat(s.Length) - displacement;
+                // float factor = math.clamp(diff / displacement / 2.0f, qs15_16.RangeMinFloat, qs15_16.RangeMaxFloat);
+                // vec2_qs15_16 offset = delta * qs15_16.FromFloat(factor);
+
                 vec2_qs15_16 delta = a.Now - b.Now;
-                float displacement = math.sqrt(qs15_16.ToFloat(delta.x) * qs15_16.ToFloat(delta.x) + qs15_16.ToFloat(delta.y) * qs15_16.ToFloat(delta.y));
-                float diff = qs15_16.ToFloat(s.Length) - displacement;
-                float factor = math.clamp(diff / displacement / 2.0f, qs15_16.RangeMinFloat, qs15_16.RangeMaxFloat);
-                vec2_qs15_16 offset = delta * qs15_16.FromFloat(factor);
+                qs15_16 sqrLength = vec2_qs15_16.dot(delta, delta);
+                qs15_16 squish = (s.Length * s.Length - sqrLength) >> 3;
+                vec2_qs15_16 offset = delta * squish;
 
                 a.Now += offset;
                 b.Now -= offset;
