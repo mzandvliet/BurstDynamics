@@ -189,8 +189,8 @@ public class FixedBounce : MonoBehaviour {
     private double _movingAvg;
 
     private void Update() {
-        var frictionMul = vscalar.One - vscalar.Epsilon * 4;
-        var frictionDiv = vscalar.One + vscalar.Epsilon * 1;
+        var frictionMul = vscalar.One - vscalar.Epsilon * 3;
+        var frictionDiv = vscalar.One + vscalar.Epsilon * 3;
         // var frictionMul = scalar.FromFloat(0.9f);
         // var frictionDiv = scalar.FromFloat(1.1f);
 
@@ -201,22 +201,28 @@ public class FixedBounce : MonoBehaviour {
             var p = _particles[i];
 
             var nudge = new velocity(
-                new vscalar((sbyte)_rng.NextInt(-3, 4)),
-                new vscalar((sbyte)_rng.NextInt(-3, 4)));
+                new vscalar((sbyte)_rng.NextInt(-1, 2)),
+                new vscalar((sbyte)_rng.NextInt(-1, 2)));
 
-            avgNudgeX += nudge.x.v;
+            // avgNudgeX += nudge.x.v;
 
             p.velocity.x += nudge.x;
             p.velocity.y += nudge.y;
 
-            // bug: division doesn't round properly, causing a biased motion to bottom left
             // p.velocity.x *= frictionMul;
             // p.velocity.y *= frictionMul;
 
             // p.velocity.x /= frictionDiv;
             // p.velocity.y /= frictionDiv;
 
-            var scaledVelocity = new velocity(p.velocity.x >> 2, p.velocity.y >> 2);
+            // p.velocity.x.v += (sbyte)(_rng.NextInt(-1, 2));
+            // p.velocity.y.v += (sbyte)(_rng.NextInt(-1, 2));
+
+            var scaledVelocity = p.velocity;
+            // var scaledVelocity = new velocity(p.velocity.x / 2, p.velocity.y / 2);
+            // scaledVelocity.x.v += (sbyte)(_rng.NextInt(-1, 2));
+            // scaledVelocity.y.v += (sbyte)(_rng.NextInt(-1, 2));
+
             avgVelStepX += vscalar.ToDouble(scaledVelocity.x);
 
             p.position.x += scaledVelocity.x;
