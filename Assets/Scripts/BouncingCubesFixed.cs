@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Jobs;
 using Unity.Burst;
+using Rng = Unity.Mathematics.Random;
 
 using Ramjet.Math.FixedPoint;
 using Ramjet.Math.LinearAlgebra;
@@ -23,6 +24,7 @@ using Ramjet.Math.LinearAlgebra;
 public class BouncingCubesFixed : MonoBehaviour {
     private NativeArray<Point> _points;
     private NativeArray<Stick> _sticks;
+    private Rng _rng;
 
     private const int NumCubes = 128;
     private const int PointsPerCube = 4;
@@ -32,15 +34,17 @@ public class BouncingCubesFixed : MonoBehaviour {
         _points = new NativeArray<Point>(NumCubes * PointsPerCube, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         _sticks = new NativeArray<Stick>(NumCubes * SticksPerCube, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
 
+        _rng = new Rng(1234);
+
         for (int i = 0; i < NumCubes; i++) {
             var pos = vec2_qs15_16.FromFloat(
-                UnityEngine.Random.Range(-20, 20f),
-                UnityEngine.Random.Range(1f, 9f));
-            AddCube(_points, _sticks, i, pos);
+                _rng.NextFloat(-20, 20f),
+                _rng.NextFloat(1f, 9f));
+            AddCube(_points, _sticks, i, pos, ref _rng);
         }
     }
 
-    private static void AddCube(NativeArray<Point> points, NativeArray<Stick> sticks, int idx, vec2_qs15_16 pos) {
+    private static void AddCube(NativeArray<Point> points, NativeArray<Stick> sticks, int idx, vec2_qs15_16 pos, ref Rng rng) {
         // Create a box with 2 diagonal supports
 
         int pointIdx = idx * PointsPerCube;
@@ -53,8 +57,8 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         cornerPos = pos + vec2_qs15_16.FromInt(0, 0);
         cornerPosOffset = vec2_qs15_16.FromFloat(
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse),
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 0] = new Point
         {
             Last = cornerPos,
@@ -63,8 +67,8 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         cornerPos = pos + vec2_qs15_16.FromInt(0, 1);
         cornerPosOffset = vec2_qs15_16.FromFloat(
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse),
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 1] = new Point
         {
             Last = cornerPos,
@@ -73,8 +77,8 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         cornerPos = pos + vec2_qs15_16.FromInt(1, 1);
         cornerPosOffset = vec2_qs15_16.FromFloat(
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse),
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 2] = new Point
         {
             Last = cornerPos,
@@ -83,8 +87,8 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         cornerPos = pos + vec2_qs15_16.FromInt(1, 0);
         cornerPosOffset = vec2_qs15_16.FromFloat(
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse),
-            UnityEngine.Random.Range(-_spawnImpulse, _spawnImpulse));
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse),
+            rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 3] = new Point
         {
             Last = cornerPos,
@@ -136,6 +140,7 @@ public class BouncingCubesFixed : MonoBehaviour {
         _sticks.Dispose();
     }
 
+    private ulong _tick;
     private JobHandle _updateHandle;
 
     private void Update() {
@@ -160,11 +165,53 @@ public class BouncingCubesFixed : MonoBehaviour {
 
     private void LateUpdate() {
         _updateHandle.Complete();
+
+        _tick++;
+        if (_tick == 120) {
+            // Hash some game state, so we can see if we have bitwise equivalence to prior runs
+            int hash = 0;
+            for (int i = 0; i < _points.Length; i++) {
+                hash ^= _points[i].Now.x.v;
+            }
+            Debug.Log(hash);
+        }
     }
 
     private void OnDrawGizmos() {
-        Gizmos.color = Color.red;
+        /*
+            Can easily divide points into regular grid by bit-shifting
+
+            In this case, shifting right by fType.Scale leaves the int
+            part, which represents meters in this world.
+
+            If we add one extra unit of shift, we get regions of 2 meters.
+
+            --
+
+            We could use this for easy spatial partioning, and even
+            better: hierarchical expressions of position data.
+
+            The idea would be that we have something like 32-bit full
+            position data, but most arithmetic can happen with 8-bit
+            local words. Each position would be epxressed relative
+            to a region. Whenever a position crosses into a new region
+            we change the association.
+
+            This would also mean that data by default is already
+            in a fast spatial partition, so finding nearest-neighbours
+            for collision detection or pathfinding or whatever
+            could piggyback on this data structure for... free.
+
+         */
+        const int pointRegionScale = qs15_16.Scale + 2;
+        const int fixedPointWordSize = 32; // todo: store as const in generate types
+
         for (int i = 0; i < _points.Length; i++) {
+            uint regionX = (uint)((1 << (fixedPointWordSize - pointRegionScale)) + (_points[i].Now.x.v >> pointRegionScale));
+            uint regionY = (uint)((1 << (fixedPointWordSize - pointRegionScale)) + (_points[i].Now.y.v >> pointRegionScale));
+            var hue = (((regionX * 3) % 5) + ((regionY * 7) % 11)) / (5f + 11f); // some mod-prime tricks to prevent black from showing up around zero
+            Gizmos.color = Color.HSVToRGB(hue, 0.8f, .9f);
+
             float3 pos = toFloat3(_points[i].Now);
             Gizmos.DrawSphere(new Vector3(pos.x, pos.y, 0f), 0.1f);
         }
