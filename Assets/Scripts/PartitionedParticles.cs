@@ -23,10 +23,28 @@ This results in 8+8 bits = 16-bit position values.
 Todo: actually perform region changes for particles crossing
 the boundary.
 
+---
+
+Findings:
+
+- Need lots of extra bookkeeping tools
+
+You want to occasionally combine lower and higher parts
+into single numbers for large-scale arithmetic. For
+example, to handle moving between regions.
+
+I'm worried that, because with DotNet operators on small
+types yielding int, and not having direct control over
+Burst vectorization, this kind of structure will not
+win out over simpler structure. You could make this
+work really well in Rust, since it offers much tighter
+control.
+
  */
 
 public class PartitionedParticles : MonoBehaviour {
-    private NativeMultiHashMap<region, Particle> _partition;
+    private NativeMultiHashMap<region, Particle> _partitionA;
+    private NativeMultiHashMap<region, Particle> _partitionB;
 
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
@@ -35,7 +53,8 @@ public class PartitionedParticles : MonoBehaviour {
     private Rng _rng;
 
     private void Awake() {
-        _partition = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
+        _partitionA = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
+        _partitionB = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
         _positions = new NativeArray<float3>(1024, Allocator.Persistent);
         _hues = new NativeArray<float>(1024, Allocator.Persistent);
 
@@ -50,12 +69,13 @@ public class PartitionedParticles : MonoBehaviour {
                 velocity = velocity.FromInt(0, 0),
             };
 
-            _partition.Add(region, particle);
+            _partitionA.Add(region, particle);
         }
     }
 
     private void OnDestroy() {
-        _partition.Dispose();
+        _partitionA.Dispose();
+        _partitionB.Dispose();
         _positions.Dispose();
         _hues.Dispose();
     }
@@ -65,10 +85,12 @@ public class PartitionedParticles : MonoBehaviour {
     private void Update() {
         var handle = new JobHandle();
 
+        _partitionB.Clear();
         var updateParticlesJob = new UpdateParticlesJob() {
-            rng = new Rng((uint)Time.frameCount)
+            rng = new Rng((uint)Time.frameCount),
+            partitionNext = _partitionB.AsParallelWriter()
         };
-        handle = updateParticlesJob.Schedule(_partition, 16, handle);
+        handle = updateParticlesJob.Schedule(_partitionA, 16, handle);
 
         var atomicCounter = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
         var convertParticlesJob = new ConvertParticlesJob() {
@@ -76,23 +98,89 @@ public class PartitionedParticles : MonoBehaviour {
             hues = _hues,
             counter = atomicCounter
         };
-        handle = convertParticlesJob.Schedule(_partition, 16, handle);
+        handle = convertParticlesJob.Schedule(_partitionB, 16, handle);
 
         handle.Complete();
+
+        var temp = _partitionA;
+        _partitionA = _partitionB;
+        _partitionB = temp;
     }
 
     [BurstCompile]
-    private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyMutableValue<region, Particle> {
+    private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, Particle> {
         public Rng rng;
+        public NativeMultiHashMap<region, Particle>.ParallelWriter partitionNext;
 
-        public void ExecuteNext(region region, ref Particle particle) {
+        public void ExecuteNext(region region, Particle particle) {
             var nudge = new velocity(
                 new vscalar((sbyte)rng.NextInt(-1, 2)),
                 new vscalar((sbyte)rng.NextInt(-1, 2)));
 
-            particle.position.x += nudge.x;
-            particle.position.y += nudge.y;
+            var posLarge = new vec2_qu8_8(
+                new qu8_8((ushort)(region.x.v << 8 + particle.position.x.v)),
+                new qu8_8((ushort)(region.y.v << 8 + particle.position.y.v))
+            );
+
+            /*
+            Todo:
+
+            At this point, we have:
+
+            [8 unsigned region bits][2 unsigned subregion bits][6 unsigned fractional region bits]
+
+            And we want to add a nudge/velocity that corresponds to the scale of:
+
+            [2 unsigned subregion bits][6 unsigned fractional region bits]
+
+            But if we take the qu8_8 position + qs_1_7 velocity, it will add as if:
+
+            [8 unsigned region bits][8 unsigned fractional region bits]
+
+            Which is wrong.
+
+            ---
+
+            Options:
+
+            - Add yet extra structure to manage all manner of these nested scale changes, tracking
+            them automatically through computation graphs, ensuring that everything checks out.
+
+            This would be the most elegant and most versatile option, in the end. But it would
+            require lots of work, including analysis tools that show you where you're at.
+
+            Essentially, it gets into the notion of UNITS. 100 centimeters make 1 meter, and
+            so on.
+
+            - Unify position and velocity types for now, before operating with them.
+
+            This is the option we'll take next.
+             */
+
+            posLarge.x += nudge.x;
+            posLarge.y += nudge.y;
+
+            region = new vec2_qu8_0(
+                new qu8_0((byte)(posLarge.x.v >> 8)),
+                new qu8_0((byte)(posLarge.y.v >> 8))
+            );
+
+            particle.position.x = new qu2_6((byte)posLarge.x.v);
+            particle.position.y = new qu2_6((byte)posLarge.y.v);
+
+            partitionNext.Add(region, particle);
         }
+
+        /*
+        Alternate, more efficient way to represent the above:
+
+        var posLarge = new vec2_qu8_8(
+                new qu8_8((ushort)(region.x.v << 8 + particle.position.x.v)),
+                new qu8_8((ushort)(region.y.v << 8 + particle.position.y.v))
+            );
+
+        But then you need to keep track of the 2-bit extra shift in scale
+         */
     }
 
     /*
