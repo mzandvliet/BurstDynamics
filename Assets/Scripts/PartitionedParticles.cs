@@ -80,7 +80,7 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 2048;
+    private const int NumParticles = 2048 * 2;
     private Rng _rng;
 
     private SimulationConfig _simConfig;
@@ -252,9 +252,9 @@ public class PartitionedParticles : MonoBehaviour {
                     0f
                 );
 
-            int index =counter.Increment();
+            int index = counter.Increment();
 
-            hues[index] = ((((region.x.v * 17) % 13) + ((region.y.v * 19) % 11)) / (13f + 11f));
+            hues[index] = (((region.x.v * 0x747A9D7Bu + region.y.v * 0x4942CA39u) + 0xAF836EE1u) % 257) / 256f;
             positions[index] = (rPos + new float3(pscalar.ToFloat(p.position.x), pscalar.ToFloat(p.position.y), 0f));
 
             // var vel = new float3(vscalar.ToFloat(p.velocity.x), vscalar.ToFloat(p.velocity.y), 0f);
