@@ -7,13 +7,6 @@ using Rng = Unity.Mathematics.Random;
 using Ramjet.Math.FixedPoint;
 using Ramjet.Math.LinearAlgebra;
 
-using rScalar = Ramjet.Math.FixedPoint.qu8_0;
-using region = Ramjet.Math.LinearAlgebra.vec2_qu8_0;
-using pscalar = Ramjet.Math.FixedPoint.qu2_6;
-using position = Ramjet.Math.LinearAlgebra.vec2_qu2_6;
-using vscalar = Ramjet.Math.FixedPoint.qs1_6;
-using velocity = Ramjet.Math.LinearAlgebra.vec2_qs1_6;
-
 /*
 Experiment in which we store particles as 8-bit position values
 relative to an index in a regular 8-bit worldspace grid.
@@ -33,6 +26,24 @@ You want to occasionally combine lower and higher parts
 into single numbers for large-scale arithmetic. For
 example, to handle moving between regions.
 
+Range and scale mapping currently takes a heck of a lot
+of work and mental bookkeeping.
+
+We can end up with nested scale situations that are
+meaningful in a game-world sense, but are not captured
+by the type system, such as as 16 bit word storing:
+
+[8 unsigned region bits][2 unsigned subregion bits][6 unsigned fractional region bits]
+
+We get this if we take:
+[8.0 bit region] + [2.6 bit fractional region position]
+
+The best the type system can make of that is:
+[8.8 bit unsigned]
+
+If you then want to perform arithmetic on the lower
+part, you need to circument the scale confusion.
+
 I'm worried that, because with DotNet operators on small
 types yielding int, and not having direct control over
 Burst vectorization, this kind of structure will not
@@ -40,7 +51,27 @@ win out over simpler structure. You could make this
 work really well in Rust, since it offers much tighter
 control.
 
+... I had to go and make things difficult by saying:
+these regions are 3x3 meters. Like a chump. :P 
+
+- Hiding fp type specifics behind using statements
+means intellisense no longer shows you the qn.m format.
+So in exchange for easier syntax you lose insight into
+what scales you are working at.
+
+- Shifint a uint returns an int, require an extra cast
+in order to continue working with it in terms of unsigneds,
+and also meaning you lose the MSB for information storage.
+Bah....
+
  */
+
+using rScalar = Ramjet.Math.FixedPoint.qu8_0;
+using region = Ramjet.Math.LinearAlgebra.vec2_qu8_0;
+using pscalar = Ramjet.Math.FixedPoint.qu2_6;
+using position = Ramjet.Math.LinearAlgebra.vec2_qu2_6;
+using vscalar = Ramjet.Math.FixedPoint.qs1_6;
+using velocity = Ramjet.Math.LinearAlgebra.vec2_qs1_6;
 
 public class PartitionedParticles : MonoBehaviour {
     private NativeMultiHashMap<region, Particle> _partitionA;
@@ -113,13 +144,13 @@ public class PartitionedParticles : MonoBehaviour {
         public NativeMultiHashMap<region, Particle>.ParallelWriter partitionNext;
 
         public void ExecuteNext(region region, Particle particle) {
-            var nudge = new velocity(
-                new vscalar((sbyte)rng.NextInt(-1, 2)),
-                new vscalar((sbyte)rng.NextInt(-1, 2)));
+            var nudge = new vec2_qs1_6(
+                new qs1_6((sbyte)rng.NextInt(-1, 2)),
+                new qs1_6((sbyte)rng.NextInt(-1, 2)));
 
             var posLarge = new vec2_qu8_8(
-                new qu8_8((ushort)(region.x.v << 8 + particle.position.x.v)),
-                new qu8_8((ushort)(region.y.v << 8 + particle.position.y.v))
+                new qu8_8((ushort)(((uint)(region.x.v << 8)) | particle.position.x.v)),
+                new qu8_8((ushort)(((uint)(region.y.v << 8)) | particle.position.y.v))
             );
 
             /*
@@ -156,6 +187,9 @@ public class PartitionedParticles : MonoBehaviour {
 
             This is the option we'll take next.
              */
+
+            // Shift our qs1_6 velocity to match the full world position stored in qu8_8
+          
 
             posLarge.x += nudge.x;
             posLarge.y += nudge.y;
