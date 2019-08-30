@@ -26,7 +26,7 @@ public class BouncingCubesFixed : MonoBehaviour {
     private NativeArray<Stick> _sticks;
     private Rng _rng;
 
-    private const int NumCubes = 128;
+    private const int NumCubes = 4;
     private const int PointsPerCube = 4;
     private const int SticksPerCube = 6;
 
@@ -205,10 +205,11 @@ public class BouncingCubesFixed : MonoBehaviour {
          */
         const int pointRegionScale = qs15_16.Scale + 2;
         const int fixedPointWordSize = 32; // todo: store as const in generate types
+        const int posToUintOffset = (1 << (fixedPointWordSize - pointRegionScale));
 
         for (int i = 0; i < _points.Length; i++) {
-            uint regionX = (uint)((1 << (fixedPointWordSize - pointRegionScale)) + (_points[i].Now.x.v >> pointRegionScale));
-            uint regionY = (uint)((1 << (fixedPointWordSize - pointRegionScale)) + (_points[i].Now.y.v >> pointRegionScale));
+            uint regionX = (uint)(posToUintOffset + (_points[i].Now.x.v >> pointRegionScale));
+            uint regionY = (uint)(posToUintOffset + (_points[i].Now.y.v >> pointRegionScale));
             var hue = (((regionX * 3) % 5) + ((regionY * 7) % 11)) / (5f + 11f); // some mod-prime tricks to prevent black from showing up around zero
             Gizmos.color = Color.HSVToRGB(hue, 0.8f, .9f);
 
@@ -267,7 +268,7 @@ public class BouncingCubesFixed : MonoBehaviour {
         public void Execute() {
             vec2_qs15_16 box = vec2_qs15_16.FromFloat(20f, 10f);
 
-            qs15_16 restitution = qs15_16.FromFloat(0.8f);
+            qs15_16 restitution = qs15_16.FromFloat(0.4f);
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];
@@ -334,8 +335,9 @@ public class BouncingCubesFixed : MonoBehaviour {
 
                 vec2_qs15_16 delta = a.Now - b.Now;
                 qs15_16 sqrLength = vec2_qs15_16.dot(delta, delta);
-                qs15_16 squish = (s.Length * s.Length - sqrLength) >> 3;
-                vec2_qs15_16 offset = delta * squish;
+                // Debug.Log(sqrLength);
+                qs15_16 squish = (s.Length * s.Length - sqrLength) >> 2;
+                vec2_qs15_16 offset = delta * (squish / 2);
 
                 a.Now += offset;
                 b.Now -= offset;

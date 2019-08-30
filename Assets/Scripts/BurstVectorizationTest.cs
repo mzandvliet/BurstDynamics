@@ -9,6 +9,8 @@ using Ramjet.Math.LinearAlgebra;
 
 using fix = Ramjet.Math.FixedPoint.qs15_16;
 using fix4 = Ramjet.Math.LinearAlgebra.vec4_qs15_16;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 // using fix = Ramjet.Math.FixedPoint.qs1_14;
 // using fix4 = Ramjet.Math.LinearAlgebra.vec4_qs1_14;
@@ -144,6 +146,74 @@ public class BurstVectorizationTest : MonoBehaviour
 
         public void Execute(int i) {
             _output[i] = fix4.dot(_inputA[i], _inputB[i]);
+        }
+    }
+}
+
+// ------
+
+/*
+This one vectorizes
+ */
+[BurstCompile]
+public struct byteAddJob : IJob {
+    [ReadOnly] public NativeArray<byte> _inputA;
+    [ReadOnly] public NativeArray<byte> _inputB;
+    [WriteOnly] public NativeArray<byte> _output;
+
+    public void Execute() {
+        for (int i = 0; i < _inputA.Length; i++) {
+            _output[i] = (byte)(_inputA[i] + _inputB[i]);
+        }
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct byte4 {
+    public byte x;
+    public byte y;
+    public byte z;
+    public byte w;
+
+    public byte4(byte x, byte y, byte z, byte w) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static byte4 operator +(byte4 lhs, byte4 rhs) {
+        return new byte4(
+            (byte)(lhs.x + rhs.x),
+            (byte)(lhs.y + rhs.y),
+            (byte)(lhs.y + rhs.z),
+            (byte)(lhs.w + rhs.w));
+    }
+}
+
+/*
+This one doesn't vectorize.
+(It does manage to optimize it every other way)
+
+It seems Burst is not able to vectorize operations on structs
+by default, or it needs very specific conditions to be met
+for it to happen.
+
+Agressive Inlining makes no difference.
+
+Wait, AVX2 does vectorize it, but anything below it does not
+ARM instructions look awful.
+ */
+[BurstCompile]
+public struct byte4AddJob : IJob {
+    [ReadOnly] public NativeArray<byte4> _inputA;
+    [ReadOnly] public NativeArray<byte4> _inputB;
+    [WriteOnly] public NativeArray<byte4> _output;
+
+    public void Execute() {
+        for (int i = 0; i < _inputA.Length; i++) {
+            _output[i] = _inputA[i] + _inputB[i];
         }
     }
 }
