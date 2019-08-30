@@ -80,20 +80,26 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 1024;
+    private const int NumParticles = 2048;
     private Rng _rng;
+
+    private SimulationConfig _simConfig;
 
     private void Awake() {
         _partitionA = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
         _partitionB = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
-        _positions = new NativeArray<float3>(1024, Allocator.Persistent);
-        _hues = new NativeArray<float>(1024, Allocator.Persistent);
+        _positions = new NativeArray<float3>(NumParticles, Allocator.Persistent);
+        _hues = new NativeArray<float>(NumParticles, Allocator.Persistent);
 
         _rng = new Rng(1234);
 
+        _simConfig = new SimulationConfig {
+            frictionMul = vscalar.One - vscalar.Epsilon * 7,
+        };
+
         for (int i = 0; i < NumParticles; i++) {
             // var region = vec2_qu8_0.FromInt((ushort)_rng.NextInt(256),(ushort)_rng.NextInt(256));
-            var region = vec2_qu8_0.FromInt((ushort)_rng.NextInt(12), (ushort)_rng.NextInt(6));
+            var region = vec2_qu8_0.FromInt((ushort)_rng.NextInt(3, 8), (ushort)_rng.NextInt(3, 8));
 
             var particle = new Particle() {
                 position = new position(new qu2_6((byte)_rng.NextInt(256)), new qu2_6((byte)_rng.NextInt(256))),
@@ -119,15 +125,17 @@ public class PartitionedParticles : MonoBehaviour {
         _partitionB.Clear();
         var updateParticlesJob = new UpdateParticlesJob() {
             rng = new Rng((uint)Time.frameCount),
+            config = _simConfig,
             partitionNext = _partitionB.AsParallelWriter()
         };
         handle = updateParticlesJob.Schedule(_partitionA, 16, handle);
 
-        var atomicCounter = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+        // var atomicCounter = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+        var atomicCounter = new JacksonDunstan.NativeCollections.NativeIntPtr(Allocator.Temp);
         var convertParticlesJob = new ConvertParticlesJob() {
             positions = _positions,
             hues = _hues,
-            counter = atomicCounter
+            counter = atomicCounter.GetParallel()
         };
         handle = convertParticlesJob.Schedule(_partitionB, 16, handle);
 
@@ -138,9 +146,14 @@ public class PartitionedParticles : MonoBehaviour {
         _partitionB = temp;
     }
 
+    private struct SimulationConfig {
+        public vscalar frictionMul;
+    }
+
     [BurstCompile]
     private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, Particle> {
         public Rng rng;
+        public SimulationConfig config;
         public NativeMultiHashMap<region, Particle>.ParallelWriter partitionNext;
 
         public void ExecuteNext(region region, Particle particle) {
@@ -188,11 +201,12 @@ public class PartitionedParticles : MonoBehaviour {
             This is the option we'll take next.
              */
 
-            // Shift our qs1_6 velocity to match the full world position stored in qu8_8
-          
+            particle.velocity += nudge;
+            particle.velocity *= config.frictionMul;
+            // particle.velocity = nudge;
 
-            posLarge.x += nudge.x;
-            posLarge.y += nudge.y;
+            posLarge.x += particle.velocity.x;
+            posLarge.y += particle.velocity.y;
 
             region = new vec2_qu8_0(
                 new qu8_0((byte)(posLarge.x.v >> 8)),
@@ -226,19 +240,19 @@ public class PartitionedParticles : MonoBehaviour {
     original multihashmap.
      */
     [BurstCompile]
-    private struct ConvertParticlesJob : IJobNativeMultiHashMapVisitKeyMutableValue<region, Particle> {
+    private struct ConvertParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, Particle> {
         [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float3> positions;
         [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> hues;
-        [NativeDisableParallelForRestriction] public NativeArray<int> counter;
+        public JacksonDunstan.NativeCollections.NativeIntPtr.Parallel counter;
 
-        public void ExecuteNext(region region, ref Particle p) {
+        public void ExecuteNext(region region, Particle p) {
             var rPos = new float3(
                     rScalar.ToFloat(region.x) * 4f,
                     rScalar.ToFloat(region.y) * 4f,
                     0f
                 );
 
-            int index = counter[0]++;
+            int index =counter.Increment();
 
             hues[index] = ((((region.x.v * 17) % 13) + ((region.y.v * 19) % 11)) / (13f + 11f));
             positions[index] = (rPos + new float3(pscalar.ToFloat(p.position.x), pscalar.ToFloat(p.position.y), 0f));
@@ -255,9 +269,9 @@ public class PartitionedParticles : MonoBehaviour {
 
         for (int i = 0; i < _positions.Length; i++) {
             var regionColor = Color.HSVToRGB(_hues[i], 0.8f, .9f);
-
             Gizmos.color = regionColor;
-            Gizmos.DrawSphere(_positions[i], 0.05f);
+
+            Gizmos.DrawSphere(_positions[i], 0.1f);
             // Gizmos.color = Color.magenta;
             // Gizmos.DrawRay(_positions[i], vel);
         }
