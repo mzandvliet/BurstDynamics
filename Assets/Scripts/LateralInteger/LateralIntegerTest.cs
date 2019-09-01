@@ -24,7 +24,7 @@ using System.Runtime.CompilerServices;
 
     - Changing test loop count from 999999 to 65536 made
     a big difference in generated code, seems faster for
-    both add methods
+    Lint
 
     Integer add ticks: 11483
     LInteger<32> add ticks: 15821
@@ -47,15 +47,13 @@ using System.Runtime.CompilerServices;
 
     Implementented a modified test for 8 bit adding, where
     now we're adding arrays of ints, and comparing it to
-    adding arrays of packed Lints:
+    adding arrays of packed Lints.
 
-    16384 adds:
+    Both now fluctuate between 1x to 3x duration of the
+    reference implementation.
 
-    uint add ticks: 590
-    LInteger<32> add ticks: 532
-
-    Byte add ticks: 179
-    LInteger<8> add ticks: 323
+    I'm guessing that for some specific use cases, types
+    like these might compete.
     
     === Todo ===
 
@@ -63,6 +61,9 @@ using System.Runtime.CompilerServices;
 
     Make a type for Lint, such that we no longer confuse a
     single Lint with an array of Lints
+
+    Implement more operations, like multiplication, and
+    some fixed-point arithmetic. See how that compares.
  */
 
 namespace LateralIntegers {
@@ -73,8 +74,8 @@ namespace LateralIntegers {
             doesn't compile it in time for the first run and
             we get the managed implementation */
 
-            // Tests.AddInt32();
-            // Tests.AddInt32();
+            Tests.AddInt32();
+            Tests.AddInt32();
 
             Tests.AddInt8();
             Tests.AddInt8();
@@ -89,7 +90,7 @@ namespace LateralIntegers {
         public static void AddInt32() {
             var rand = new Rng(1234);
 
-            const int NumNumbers = 16384;
+            const int NumNumbers = 16384 * 16;
 
             // Generate some random integer inputs
 
@@ -179,7 +180,7 @@ namespace LateralIntegers {
         public static void AddInt8() {
             var rand = new Rng(1234);
             
-            const int NumNumbers = 16384;
+            const int NumNumbers = 16384 * 16;
             
             // Generate some random integer inputs
 
@@ -311,7 +312,7 @@ namespace LateralIntegers {
 
         public void Execute() {
             for (int i = 0; i < Count; i++) {
-                LUInt.Add32Bit(a.Slice(i * 8, 8), b.Slice(i * 8, 8), r.Slice(i * 8, 8));
+                LUInt.Add8Bit(a.Slice(i * 8, 8), b.Slice(i * 8, 8), r.Slice(i * 8, 8));
             }
         }
     }
@@ -355,7 +356,18 @@ namespace LateralIntegers {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static word_u32 Add32Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
             word_u32 carry = 0;
-            for (int i = 0; i < a.Length; i++) {
+            for (int i = 0; i < 32; i++) {
+                word_u32 a_plus_b = a[i] ^ b[i];
+                r[i] = a_plus_b ^ carry;
+                carry = (a[i] & b[i]) ^ (carry & a_plus_b);
+            }
+            return carry;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static word_u32 Add8Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
+            word_u32 carry = 0;
+            for (int i = 0; i < 8; i++) {
                 word_u32 a_plus_b = a[i] ^ b[i];
                 r[i] = a_plus_b ^ carry;
                 carry = (a[i] & b[i]) ^ (carry & a_plus_b);
