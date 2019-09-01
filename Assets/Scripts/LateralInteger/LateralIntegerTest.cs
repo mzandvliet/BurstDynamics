@@ -38,12 +38,10 @@ using System.Runtime.CompilerServices;
     LInteger<32> add ticks: 15802
 
     Byte add ticks: 1446
-    LInteger<8> add ticks: 15569
+    LInteger<8> add ticks: 4096
 
     Ah, it is able to vectorize this case of byte adds,
     so it wins significantly over Lint.
-
-    But why is the Lint<8> case not faster than Lint<32>???
  */
 
 namespace LateralIntegers {
@@ -174,7 +172,7 @@ namespace LateralIntegers {
 
             // Perform linteger adds, measure time
             
-            var addLIntJob = new AddLInt32Job()
+            var addLIntJob = new AddLInt8Job()
             {
                 a = aLInt,
                 b = bLInt,
@@ -241,7 +239,20 @@ namespace LateralIntegers {
 
         public void Execute() {
             for (int i = 0; i < 65536; i++) {
-                LUInt32.Add(a, b, r);
+                LUInt32.Add32Bit(a, b, r);
+            }
+        }
+    }
+
+    [BurstCompile]
+    public struct AddLInt8Job : IJob {
+        [ReadOnly] public NativeSlice<word_u32> a;
+        [ReadOnly] public NativeSlice<word_u32> b;
+        [WriteOnly] public NativeSlice<word_u32> r;
+
+        public void Execute() {
+            for (int i = 0; i < 65536; i++) {
+                LUInt32.Add8Bit(a, b, r);
             }
         }
     }
@@ -282,9 +293,19 @@ namespace LateralIntegers {
 
     public static class LUInt32 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static word_u32 Add(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
+        public static word_u32 Add32Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
             word_u32 carry = 0;
             for (int i = 0; i < 32; i++) {
+                word_u32 a_plus_b = a[i] ^ b[i];
+                r[i] = a_plus_b ^ carry;
+                carry = (a[i] & b[i]) ^ (carry & a_plus_b);
+            }
+            return carry;
+        }
+
+        public static word_u32 Add8Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
+            word_u32 carry = 0;
+            for (int i = 0; i < 8; i++) {
                 word_u32 a_plus_b = a[i] ^ b[i];
                 r[i] = a_plus_b ^ carry;
                 carry = (a[i] & b[i]) ^ (carry & a_plus_b);
