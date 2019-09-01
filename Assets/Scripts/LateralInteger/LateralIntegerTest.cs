@@ -91,8 +91,6 @@ namespace LateralIntegers {
             watch.Stop();
             Debug.Log("Integer add ticks: " + watch.ElapsedTicks);
 
-            // Perform linteger adds, measure time
-
             // Convert to LInt format
 
             var aLInt = new NativeArray<word_u32>(32, Allocator.TempJob);
@@ -100,6 +98,8 @@ namespace LateralIntegers {
             var rLInt = new NativeArray<word_u32>(32, Allocator.TempJob);
             LUInt32.ToLInt(aInt, aLInt);
             LUInt32.ToLInt(bInt, bLInt);
+
+            // Perform linteger adds, measure time
 
             var addLIntJob = new AddLInt32Job()
             {
@@ -134,7 +134,7 @@ namespace LateralIntegers {
         }
 
         /*
-        Add 32 32-bit numbers to each other
+        Add 32 8-bit numbers to each other
          */
         public static void AddInt8() {
             var rand = new Rng(1234);
@@ -149,14 +149,6 @@ namespace LateralIntegers {
                 bInt[i] = (word_u8)rand.NextUInt(0, (word_u8)(word_u8.MaxValue / 4));
             }
 
-            // Convert to LInt format
-
-            var aLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
-            var bLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
-            var rLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
-            LUInt32.ToLInt(aInt, aLInt);
-            LUInt32.ToLInt(bInt, bLInt);
-
             // Perform regular integer adds, measure time
             
             var addIntJob = new AddInt8Job()
@@ -170,9 +162,17 @@ namespace LateralIntegers {
             watch.Stop();
             Debug.Log("Byte add ticks: " + watch.ElapsedTicks);
 
+            // Convert to LInt format
+
+            var aLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
+            var bLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
+            var rLInt = new NativeArray<word_u32>(8, Allocator.TempJob);
+            LUInt32.ToLInt(aInt, aLInt);
+            LUInt32.ToLInt(bInt, bLInt);
+
             // Perform linteger adds, measure time
             
-            var addLIntJob = new AddLInt8Job()
+            var addLIntJob = new AddLInt32Job()
             {
                 a = aLInt,
                 b = bLInt,
@@ -212,7 +212,7 @@ namespace LateralIntegers {
         [WriteOnly] public NativeSlice<word_u32> r;
 
         public void Execute() {
-            for (int i = 0; i < 65536; i++) {
+            for (int i = 0; i < 65536 * 4; i++) {
                 UInt.Add(a, b, r);
             }
         }
@@ -225,7 +225,7 @@ namespace LateralIntegers {
         [WriteOnly] public NativeSlice<word_u8> r;
 
         public void Execute() {
-            for (int i = 0; i < 65536; i++) {
+            for (int i = 0; i < 65536 * 4; i++) {
                 UInt.Add(a, b, r);
             }
         }
@@ -238,21 +238,8 @@ namespace LateralIntegers {
         [WriteOnly] public NativeSlice<word_u32> r;
 
         public void Execute() {
-            for (int i = 0; i < 65536; i++) {
+            for (int i = 0; i < 65536 * 4; i++) {
                 LUInt32.Add32Bit(a, b, r);
-            }
-        }
-    }
-
-    [BurstCompile]
-    public struct AddLInt8Job : IJob {
-        [ReadOnly] public NativeSlice<word_u32> a;
-        [ReadOnly] public NativeSlice<word_u32> b;
-        [WriteOnly] public NativeSlice<word_u32> r;
-
-        public void Execute() {
-            for (int i = 0; i < 65536; i++) {
-                LUInt32.Add8Bit(a, b, r);
             }
         }
     }
@@ -293,19 +280,9 @@ namespace LateralIntegers {
 
     public static class LUInt32 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static word_u32 Add32Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
+        public static word_u32 Add32Bit([NoAlias] in NativeSlice<word_u32> a, [NoAlias] in NativeSlice<word_u32> b, [NoAlias] NativeSlice<word_u32> r) {
             word_u32 carry = 0;
-            for (int i = 0; i < 32; i++) {
-                word_u32 a_plus_b = a[i] ^ b[i];
-                r[i] = a_plus_b ^ carry;
-                carry = (a[i] & b[i]) ^ (carry & a_plus_b);
-            }
-            return carry;
-        }
-
-        public static word_u32 Add8Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
-            word_u32 carry = 0;
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < a.Length; i++) {
                 word_u32 a_plus_b = a[i] ^ b[i];
                 r[i] = a_plus_b ^ carry;
                 carry = (a[i] & b[i]) ^ (carry & a_plus_b);
