@@ -42,6 +42,33 @@ using System.Runtime.CompilerServices;
 
     Ah, it is able to vectorize this case of byte adds,
     so it wins significantly over Lint.
+
+    --
+
+    Implementented a modified test for 8 bit adding, where
+    now we're adding arrays of ints, and comparing it to
+    adding arrays of packed Lints. Very interesting results!
+
+    When adding only 128 numbers, we get:
+
+    Byte add ticks: 155
+    LInt add ticks: 149
+
+    So they're extremely close here.
+
+    But when we add 16384 of them, we get:
+
+    Byte add ticks: 91337
+    LInt add ticks: 317
+
+    What the heck??
+
+    So I implemented a full check on equivalence between all
+    the numbers in the sequence, and it checks out.
+
+    Is this some burst vectorization that sometimes does,
+    and sometimes does not happen? Is there some reason
+    for the naive byte adds to scale this poorly?
  */
 
 namespace LateralIntegers {
@@ -139,8 +166,7 @@ namespace LateralIntegers {
         public static void AddInt8() {
             var rand = new Rng(1234);
             
-            // const int NumNumbers = 65536;
-            const int NumNumbers = 4096;
+            const int NumNumbers = 128;
             
             // Generate some random integer inputs
 
@@ -193,16 +219,29 @@ namespace LateralIntegers {
 
             // Print linteger addition results as integers
 
-            var rAsInt = new NativeArray<word_u32>(8, Allocator.Temp);
-            LUInt32.ToInt(rLInt.Slice((NumLints-1)*8,8), rAsInt);
+            var rAsInt = new NativeArray<word_u8>(NumNumbers, Allocator.Temp);
+            LUInt32.ToIntArray(rLInt, rAsInt);
 
-            UInt.Print(aInt.Slice(NumNumbers - 32, 8));
-            Debug.Log("++++++++++++++++++++++++++++++++");
-            UInt.Print(bInt.Slice(NumNumbers - 32, 8));
-            Debug.Log("================================");
-            UInt.Print(rAsInt);
-            Debug.Log("===== should be equal to: ======");
-            UInt.Print(rInt.Slice(NumNumbers - 32, 8));
+            // UInt.Print(aInt);
+            // Debug.Log("++++++++++++++++++++++++++++++++");
+            // UInt.Print(bInt);
+            // Debug.Log("================================");
+            // UInt.Print(rAsInt);
+            // Debug.Log("===== should be equal to: ======");
+            // UInt.Print(rInt);
+
+            bool correct = true;
+            for (int i = 0; i < rInt.Length; i++) {
+                if (rAsInt[i] != rInt[i]) {
+                    correct = false;
+                    break;
+                }
+            }
+            if (correct) {
+                Debug.Log("All calculations verified and correct!");
+            } else {
+                Debug.LogError("Some error occured, calculation results are not correct.");
+            }
 
             aInt.Dispose();
             bInt.Dispose();
@@ -210,6 +249,7 @@ namespace LateralIntegers {
             aLInt.Dispose();
             bLInt.Dispose();
             rLInt.Dispose();
+            rAsInt.Dispose();
         }
     }
 
@@ -354,6 +394,13 @@ namespace LateralIntegers {
                 for (int b = 0; b < lints.Length; b++) {
                     ints[i] |= (ushort)(((lints[b] >> i) & 0x0000_0001) << b);
                 }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToIntArray(in NativeSlice<word_u32> lints, NativeSlice<word_u8> ints) {
+            for (int i = 0; i < ints.Length / 32; i++) {
+                ToInt(lints.Slice(i * 8, 8), ints.Slice(i * 32, 32));
             }
         }
 
