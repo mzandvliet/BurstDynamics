@@ -47,28 +47,22 @@ using System.Runtime.CompilerServices;
 
     Implementented a modified test for 8 bit adding, where
     now we're adding arrays of ints, and comparing it to
-    adding arrays of packed Lints. Very interesting results!
+    adding arrays of packed Lints:
 
-    When adding only 128 numbers, we get:
+    16384 adds:
 
-    Byte add ticks: 155
-    LInt add ticks: 149
+    uint add ticks: 590
+    LInteger<32> add ticks: 532
 
-    So they're extremely close here.
+    Byte add ticks: 179
+    LInteger<8> add ticks: 323
+    
+    === Todo ===
 
-    But when we add 16384 of them, we get:
+    Types!
 
-    Byte add ticks: 91337
-    LInt add ticks: 317
-
-    What the heck??
-
-    So I implemented a full check on equivalence between all
-    the numbers in the sequence, and it checks out.
-
-    Is this some burst vectorization that sometimes does,
-    and sometimes does not happen? Is there some reason
-    for the naive byte adds to scale this poorly?
+    Make a type for Lint, such that we no longer confuse a
+    single Lint with an array of Lints
  */
 
 namespace LateralIntegers {
@@ -95,20 +89,23 @@ namespace LateralIntegers {
         public static void AddInt32() {
             var rand = new Rng(1234);
 
+            const int NumNumbers = 16384;
+
             // Generate some random integer inputs
 
-            var aInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            var bInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            var rInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            for (int i = 0; i < aInt.Length; i++) {
-                aInt[i] = rand.NextUInt(0, (uint)(word_u32.MaxValue / 4));
-                bInt[i] = rand.NextUInt(0, (uint)(word_u32.MaxValue / 4));
+            var aInt = new NativeArray<word_u32>(NumNumbers, Allocator.TempJob);
+            var bInt = new NativeArray<word_u32>(NumNumbers, Allocator.TempJob);
+            var rInt = new NativeArray<word_u32>(NumNumbers, Allocator.TempJob);
+            for (int i = 0; i < NumNumbers; i++) {
+                aInt[i] = rand.NextUInt(0, (word_u32)(word_u32.MaxValue / 4));
+                bInt[i] = rand.NextUInt(0, (word_u32)(word_u32.MaxValue / 4));
             }
 
             // Perform regular integer adds, measure time
-            
+
             var addIntJob = new AddInt32Job()
             {
+                Count = NumNumbers,
                 a = aInt,
                 b = bInt,
                 r = rInt
@@ -116,20 +113,22 @@ namespace LateralIntegers {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             addIntJob.Schedule().Complete();
             watch.Stop();
-            Debug.Log("Integer add ticks: " + watch.ElapsedTicks);
+            Debug.Log("uint add ticks: " + watch.ElapsedTicks);
 
             // Convert to LInt format
 
-            var aLInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            var bLInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            var rLInt = new NativeArray<word_u32>(32, Allocator.TempJob);
-            LUInt32.ToLInt(aInt, aLInt);
-            LUInt32.ToLInt(bInt, bLInt);
+            const int NumLints = (NumNumbers / 32);
+            var aLInt = new NativeArray<word_u32>(NumLints * 32, Allocator.TempJob);
+            var bLInt = new NativeArray<word_u32>(NumLints * 32, Allocator.TempJob);
+            var rLInt = new NativeArray<word_u32>(NumLints * 32, Allocator.TempJob);
+            LUInt.ToLIntArray(aInt, aLInt);
+            LUInt.ToLIntArray(bInt, bLInt);
 
             // Perform linteger adds, measure time
 
-            var addLIntJob = new AddLInt32Job()
+            var addLIntJob = new AddLUInt32Job()
             {
+                Count = NumLints,
                 a = aLInt,
                 b = bLInt,
                 r = rLInt
@@ -141,8 +140,8 @@ namespace LateralIntegers {
 
             // Print linteger addition results as integers
 
-            // var rAsInt = new NativeArray<word_u32>(32, Allocator.Temp);
-            // LUInt32.ToInt(rLInt, rAsInt);
+            var rAsInt = new NativeArray<word_u32>(NumNumbers, Allocator.Temp);
+            LUInt.ToIntArray(rLInt, rAsInt);
 
             // UInt.Print(aInt);
             // Debug.Log("++++++++++++++++++++++++++++++++");
@@ -152,12 +151,26 @@ namespace LateralIntegers {
             // Debug.Log("===== should be equal to: ======");
             // UInt.Print(rInt);
 
+            bool correct = true;
+            for (int i = 0; i < rInt.Length; i++) {
+                if (rAsInt[i] != rInt[i]) {
+                    correct = false;
+                    break;
+                }
+            }
+            if (correct) {
+                Debug.Log("All calculations verified and correct!");
+            } else {
+                Debug.LogError("Some error occured, calculation results are not correct.");
+            }
+
             aInt.Dispose();
             bInt.Dispose();
             rInt.Dispose();
             aLInt.Dispose();
             bLInt.Dispose();
             rLInt.Dispose();
+            rAsInt.Dispose();
         }
 
         /*
@@ -166,7 +179,7 @@ namespace LateralIntegers {
         public static void AddInt8() {
             var rand = new Rng(1234);
             
-            const int NumNumbers = 128;
+            const int NumNumbers = 16384;
             
             // Generate some random integer inputs
 
@@ -198,14 +211,12 @@ namespace LateralIntegers {
             var aLInt = new NativeArray<word_u32>(NumLints * 8, Allocator.TempJob);
             var bLInt = new NativeArray<word_u32>(NumLints * 8, Allocator.TempJob);
             var rLInt = new NativeArray<word_u32>(NumLints * 8, Allocator.TempJob);
-            // LUInt32.ToLInt(aInt, aLInt);
-            // LUInt32.ToLInt(bInt, bLInt);
-            LUInt32.ToLIntArray(aInt, aLInt);
-            LUInt32.ToLIntArray(bInt, bLInt);
+            LUInt.ToLIntArray(aInt, aLInt);
+            LUInt.ToLIntArray(bInt, bLInt);
 
             // Perform linteger adds, measure time
             
-            var addLIntJob = new AddLInt32Job()
+            var addLIntJob = new AddLUInt8Job()
             {
                 Count = NumLints,
                 a = aLInt,
@@ -220,7 +231,7 @@ namespace LateralIntegers {
             // Print linteger addition results as integers
 
             var rAsInt = new NativeArray<word_u8>(NumNumbers, Allocator.Temp);
-            LUInt32.ToIntArray(rLInt, rAsInt);
+            LUInt.ToIntArray(rLInt, rAsInt);
 
             // UInt.Print(aInt);
             // Debug.Log("++++++++++++++++++++++++++++++++");
@@ -255,14 +266,13 @@ namespace LateralIntegers {
 
     [BurstCompile]
     public struct AddInt32Job : IJob {
+        [ReadOnly] public int Count;
         [ReadOnly] public NativeSlice<word_u32> a;
         [ReadOnly] public NativeSlice<word_u32> b;
         [WriteOnly] public NativeSlice<word_u32> r;
 
         public void Execute() {
-            for (int i = 0; i < a.Length; i++) {
-                UInt.Add(a, b, r);
-            }
+            UInt.Add(a, b, r);
         }
     }
 
@@ -274,14 +284,12 @@ namespace LateralIntegers {
         [WriteOnly] public NativeSlice<word_u8> r;
 
         public void Execute() {
-            for (int i = 0; i < Count; i++) {
-                UInt.Add(a, b, r);
-            }
+            UInt.Add(a, b, r);
         }
     }
 
     [BurstCompile]
-    public struct AddLInt32Job : IJob {
+    public struct AddLUInt32Job : IJob {
         [ReadOnly] public int Count;
         [ReadOnly] public NativeSlice<word_u32> a;
         [ReadOnly] public NativeSlice<word_u32> b;
@@ -289,7 +297,21 @@ namespace LateralIntegers {
 
         public void Execute() {
             for (int i = 0; i < Count; i++) {
-                LUInt32.Add32Bit(a.Slice(i * 8, 8), b.Slice(i * 8, 8), r.Slice(i * 8, 8));
+                LUInt.Add32Bit(a.Slice(i * 32, 32), b.Slice(i * 32, 32), r.Slice(i * 32, 32));
+            }
+        }
+    }
+
+    [BurstCompile]
+    public struct AddLUInt8Job : IJob {
+        [ReadOnly] public int Count;
+        [ReadOnly] public NativeSlice<word_u32> a;
+        [ReadOnly] public NativeSlice<word_u32> b;
+        [WriteOnly] public NativeSlice<word_u32> r;
+
+        public void Execute() {
+            for (int i = 0; i < Count; i++) {
+                LUInt.Add32Bit(a.Slice(i * 8, 8), b.Slice(i * 8, 8), r.Slice(i * 8, 8));
             }
         }
     }
@@ -328,9 +350,10 @@ namespace LateralIntegers {
         }
     }
 
-    public static class LUInt32 {
+    public static class LUInt {
+        // [NoAlias]?
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static word_u32 Add32Bit([NoAlias] in NativeSlice<word_u32> a, [NoAlias] in NativeSlice<word_u32> b, [NoAlias] NativeSlice<word_u32> r) {
+        public static word_u32 Add32Bit(in NativeSlice<word_u32> a, in NativeSlice<word_u32> b, NativeSlice<word_u32> r) {
             word_u32 carry = 0;
             for (int i = 0; i < a.Length; i++) {
                 word_u32 a_plus_b = a[i] ^ b[i];
@@ -338,6 +361,13 @@ namespace LateralIntegers {
                 carry = (a[i] & b[i]) ^ (carry & a_plus_b);
             }
             return carry;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToLIntArray(in NativeSlice<word_u32> ints, NativeSlice<word_u32> lints) {
+            for (int i = 0; i < ints.Length / 32; i++) {
+                ToLInt(ints.Slice(i * 32, 32), lints.Slice(i * 32, 32));
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -374,6 +404,13 @@ namespace LateralIntegers {
                 for (int i = 0; i < ints.Length; i++) {
                     lints[b] |= (((uint)ints[i] >> b) & 0x0000_0001) << i;
                 }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToIntArray(in NativeSlice<word_u32> lints, NativeSlice<word_u32> ints) {
+            for (int i = 0; i < ints.Length / 32; i++) {
+                ToInt(lints.Slice(i * 32, 32), ints.Slice(i * 32, 32));
             }
         }
 
