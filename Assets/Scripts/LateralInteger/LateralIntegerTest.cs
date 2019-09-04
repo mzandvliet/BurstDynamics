@@ -11,6 +11,7 @@ using word_u32 = System.UInt32;
 using word_u16 = System.UInt16;
 using word_u8 = System.Byte;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 /*
     Observations while porting this:
@@ -62,8 +63,8 @@ using System.Runtime.CompilerServices;
     Added a version where we store 64 32-bit integers
     in a single Lint. We get:
 
-    uint add ticks: 1857
-    LInt add ticks: 2071
+    uint add ticks: 1600-2400
+    LInt add ticks: 2071-2400
 
     This is a negligable performance difference now, and
     this makes it the best-performing Lint on my own
@@ -78,6 +79,12 @@ using System.Runtime.CompilerServices;
 
     Implement more operations, like multiplication, and
     some fixed-point arithmetic. See how that compares.
+
+    --
+
+    Burst might not be able to paralellize some things
+    because it cannot see groups of words as a single
+    unit, without types.
  */
 
 namespace LateralIntegers {
@@ -88,14 +95,20 @@ namespace LateralIntegers {
             doesn't compile it in time for the first run and
             we get the managed implementation */
 
-            Tests.AddInt32();
-            Tests.AddInt32();
+            // var value = new lint32_64();
+            // value[1] = 1234;
+            // for (int i = 0; i < 32; i++) {
+            //     Debug.Log(i + ": " + value[i]);
+            // }
+
+            // Tests.AddInt32();
+            // Tests.AddInt32();
 
             Tests.AddInt32WithInt64();
             Tests.AddInt32WithInt64();
 
-            Tests.AddInt8();
-            Tests.AddInt8();
+            // Tests.AddInt8();
+            // Tests.AddInt8();
         }
     }
 
@@ -198,6 +211,7 @@ namespace LateralIntegers {
             var rand = new Rng(1234);
 
             const int NumNumbers = 16384 * 16;
+            // const int NumNumbers = 128;
 
             // Generate some random integer inputs
 
@@ -226,9 +240,9 @@ namespace LateralIntegers {
             // Convert to LInt format
 
             const int NumLints = (NumNumbers / 32 / 2);
-            var aLInt = new NativeArray<word_u64>(NumLints * 32, Allocator.TempJob);
-            var bLInt = new NativeArray<word_u64>(NumLints * 32, Allocator.TempJob);
-            var rLInt = new NativeArray<word_u64>(NumLints * 32, Allocator.TempJob);
+            var aLInt = new NativeArray<lint32_64>(NumLints, Allocator.TempJob);
+            var bLInt = new NativeArray<lint32_64>(NumLints, Allocator.TempJob);
+            var rLInt = new NativeArray<lint32_64>(NumLints, Allocator.TempJob);
             LUInt.ToLIntArray(aInt, aLInt);
             LUInt.ToLIntArray(bInt, bLInt);
 
@@ -372,6 +386,61 @@ namespace LateralIntegers {
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct lint32_64 {
+        public word_u64 i0;
+        public word_u64 i1;
+        public word_u64 i2;
+        public word_u64 i3;
+        public word_u64 i4;
+        public word_u64 i5;
+        public word_u64 i6;
+        public word_u64 i7;
+        public word_u64 i8;
+        public word_u64 i9;
+        public word_u64 i10;
+        public word_u64 i11;
+        public word_u64 i12;
+        public word_u64 i13;
+        public word_u64 i14;
+        public word_u64 i15;
+        public word_u64 i16;
+        public word_u64 i17;
+        public word_u64 i18;
+        public word_u64 i19;
+        public word_u64 i20;
+        public word_u64 i21;
+        public word_u64 i22;
+        public word_u64 i23;
+        public word_u64 i24;
+        public word_u64 i25;
+        public word_u64 i26;
+        public word_u64 i27;
+        public word_u64 i28;
+        public word_u64 i29;
+        public word_u64 i30;
+        public word_u64 i31;
+
+        public word_u64 this[int key] {
+            get {
+                unsafe {
+                    fixed(word_u64* me = &i0) {
+                        return me[key];
+                    }
+                }
+            }
+            set {
+                unsafe {
+                    fixed (word_u64* me = &i0) {
+                        me[key] = value;
+                    }
+                }
+            }
+        }
+
+        public const int Length = 32;
+    }
+
     [BurstCompile]
     public struct AddInt32Job : IJob {
         [ReadOnly] public int Count;
@@ -399,14 +468,28 @@ namespace LateralIntegers {
     [BurstCompile]
     public struct Add32BitLUInt64Job : IJob {
         [ReadOnly] public int Count;
-        [ReadOnly] public NativeSlice<word_u64> a;
-        [ReadOnly] public NativeSlice<word_u64> b;
-        [WriteOnly] public NativeSlice<word_u64> r;
+        [ReadOnly] public NativeSlice<lint32_64> a;
+        [ReadOnly] public NativeSlice<lint32_64> b;
+        [WriteOnly] public NativeSlice<lint32_64> r;
 
         public void Execute() {
-            for (int i = 0; i < Count; i++) {
-                LUInt.Add32BitAs64Bit(a.Slice(i * 32, 32), b.Slice(i * 32, 32), r.Slice(i * 32, 32));
+            unsafe {
+                for (int i = 0; i < Count; i++) {
+                    LUInt.Add32BitAs64Bit(a[i], b[i], (lint32_64*)(r[i]));
+                }
             }
+        }
+    }
+
+    [BurstCompile]
+    public struct Add32BitLUInt64JobParallel : IJobParallelFor {
+        [ReadOnly] public int Count;
+        [ReadOnly] public NativeSlice<lint32_64> a;
+        [ReadOnly] public NativeSlice<lint32_64> b;
+        [WriteOnly] public NativeSlice<lint32_64> r;
+
+        public void Execute(int i) {
+            // LUInt.Add32BitAs64Bit(a[i], b[i], r[i]);
         }
     }
 
@@ -474,14 +557,13 @@ namespace LateralIntegers {
 
     public static class LUInt {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Add32BitAs64Bit(in NativeSlice<word_u64> a, in NativeSlice<word_u64> b, NativeSlice<word_u64> r) {
+        public static unsafe void Add32BitAs64Bit(in lint32_64 a, in lint32_64 b, lint32_64* r) {
             word_u64 carry = 0;
             for (int i = 0; i < 32; i++) {
                 word_u64 a_plus_b = a[i] ^ b[i];
-                r[i] = a_plus_b ^ carry;
+                (*r)[i] = a_plus_b ^ carry;
                 carry = (a[i] & b[i]) ^ (carry & a_plus_b);
             }
-            // return carry;
         }
 
         // [NoAlias]?
@@ -515,24 +597,26 @@ namespace LateralIntegers {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void ToLIntArray(in NativeSlice<word_u32> ints, NativeSlice<word_u64> lints) {
-            if (ints.Length / 2 != lints.Length) {
-                throw new System.ArgumentException(string.Format("Array sizes don't match: {0}/2 should equal {1}", ints.Length, lints.Length));
+        public static void ToLIntArray(in NativeSlice<word_u32> ints, NativeSlice<lint32_64> lints) {
+            if (ints.Length / 64 != lints.Length) {
+                throw new System.ArgumentException(string.Format("Array sizes don't match: {0}/64 should equal {1}", ints.Length, lints.Length));
             }
 
             for (int i = 0; i < ints.Length / 64; i++) {
-                ToLInt(ints.Slice(i * 64, 64), lints.Slice(i * 32, 32));
+                lints[i] = ToLInt(ints.Slice(i * 64, 64));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void ToLInt(in NativeSlice<word_u32> ints, NativeSlice<word_u64> lints) {
-            for (int b = 0; b < lints.Length; b++) {
-                lints[b] = 0;
+        public static lint32_64 ToLInt(in NativeSlice<word_u32> ints) {
+            var lint = new lint32_64();
+            for (int b = 0; b < lint32_64.Length; b++) {
+                lint[b] = 0;
                 for (int i = 0; i < ints.Length; i++) {
-                    lints[b] |= (word_u64)(((ints[(int)i] >> b) & 0x0000_0001)) << i;
+                    lint[b] |= (word_u64)(((ints[(int)i] >> b) & 0x0000_0001)) << i;
                 }
             }
+            return lint;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -573,9 +657,9 @@ namespace LateralIntegers {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void ToIntArray(in NativeSlice<word_u64> lints, NativeSlice<word_u32> ints) {
-            for (int i = 0; i < lints.Length / 32; i++) {
-                ToInt(lints.Slice(i * 32, 32), ints.Slice(i * 64, 64));
+        public static void ToIntArray(in NativeSlice<lint32_64> lints, NativeSlice<word_u32> ints) {
+            for (int i = 0; i < lints.Length; i++) {
+                ToInt(lints[i], ints.Slice(i * 64, 64));
             }
         }
 
@@ -587,11 +671,11 @@ namespace LateralIntegers {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void ToInt(in NativeSlice<word_u64> lints, NativeSlice<word_u32> ints) {
+        public static void ToInt(in lint32_64 lint, NativeSlice<word_u32> ints) {
             for (int i = 0; i < ints.Length; i++) {
                 ints[i] = 0;
-                for (int b = 0; b < lints.Length; b++) {
-                    ints[i] |= (word_u32)(((lints[b] >> i) & 0x0000_0000_0000_0001) << b);
+                for (int b = 0; b < lint32_64.Length; b++) {
+                    ints[i] |= (word_u32)(((lint[b] >> i) & 0x0000_0000_0000_0001) << b);
                 }
             }
         }
@@ -633,9 +717,9 @@ namespace LateralIntegers {
             }
         }
 
-        public static void Print(in NativeSlice<word_u64> lints) {
-            for (int i = 0; i < lints.Length; i++) {
-                Debug.Log(ToBitString(lints[i]));
+        public static void Print(in lint32_64 lint) {
+            for (int i = 0; i < lint32_64.Length; i++) {
+                Debug.Log(ToBitString(lint[i]));
             }
         }
 
