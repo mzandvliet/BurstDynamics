@@ -129,7 +129,7 @@ using position = Ramjet.Math.LinearAlgebra.vec2_qs3_4;
 using vscalar = Ramjet.Math.FixedPoint.qs1_6;
 using velocity = Ramjet.Math.LinearAlgebra.vec2_qs1_6;
 
-public class FixedBounce : MonoBehaviour {
+public class FixedPointBrownianParticles : MonoBehaviour {
     private NativeList<Particle> _particles;
     private const int NumParticles = 1024;
     private Rng _rng;
