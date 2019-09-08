@@ -146,7 +146,7 @@ public class FixedBounce : MonoBehaviour {
             });
         }
 
-        // var friction = q24_7.One - q24_7.Epsilon;
+        // var friction = q2 4_7.One - q24_7.Epsilon;
         var friction = pscalar.FromFloat(0.9f);
 
         /*
