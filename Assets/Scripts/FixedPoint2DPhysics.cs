@@ -77,6 +77,19 @@ arithmetic.
 
 Anyway, this gives us additional options. :)
 
+If I try to naively convert from fixed point to projective int
+using:
+
+return new vec2_proj(
+    qs19_12.One.v,
+    v.x.v,
+    v.y.v
+);
+
+Then coefficients get LARGE quick once you start arithmetic.
+Instead I've opted to use fixed point values in the code
+below for [c,x,y]
+
 */
 
 namespace FixedPointPhysics {
@@ -108,40 +121,33 @@ namespace FixedPointPhysics {
         }
 
         private void TestProjectiveGeometry() {
-            var segmentA = new Segment()
-            {
-                a = vec2_qs19_12.FromInt(10, 0),
-                b = vec2_qs19_12.FromInt(-10, 0)
-            };
-
-            var segmentB = new Segment()
-            {
-                a = vec2_qs19_12.FromInt(1, -10),
-                b = vec2_qs19_12.FromInt(1, 10)
-            };
-
             // Should meet at [1, 0]
-
-            // var a_a = ToProjective(segmentA.a);
-            // var a_b = ToProjective(segmentA.b);
-            // var b_a = ToProjective(segmentB.a);
-            // var b_b = ToProjective(segmentB.b);
 
             var a_a = new vec2_proj(1, 10, 0);
             var a_b = new vec2_proj(1, -10, 0);
             var b_a = new vec2_proj(1, 1, -10);
             var b_b = new vec2_proj(1, 1, 10);
 
-            var joinA = JoinOfPoints(a_a, a_b);
-            var joinB = JoinOfPoints(b_a, b_b);
+            var joinA = JoinMeet(a_a, a_b);
+            var joinB = JoinMeet(b_a, b_b);
+            var meet = JoinMeet(joinA, joinB);
 
-            var meetAB = MeetOfLines(joinA, joinB);
+            Debug.Log(meet.x / (float)meet.c + ", " + meet.y / (float)meet.c);
 
-            var result = ToFixed(meetAB);
+            // The above trivial version with small integers works fine
 
-            Debug.Log(meetAB.x / (float)meetAB.c + ", " + meetAB.y / (float)meetAB.c);
+            var a_a_fp = vec3_qs19_12.FromInt(10, 0, 1);
+            var a_b_fp = vec3_qs19_12.FromInt(-10, 0, 1);
+            var b_a_fp = vec3_qs19_12.FromInt(1, -10, 1);
+            var b_b_fp = vec3_qs19_12.FromInt(1, 10, 1);
 
-            // The above trivial version with small integers works
+            var joinA_fp = JoinMeet(a_a_fp, a_b_fp);
+            var joinB_fp = JoinMeet(b_a_fp, b_b_fp);
+            var meet_fp = JoinMeet(joinA_fp, joinB_fp);
+
+            Debug.Log(meet_fp.x / meet_fp.z + ", " + meet_fp.y / meet_fp.z);
+
+            // This did effectively the same thing with fixed point numbers
         }
 
         private struct vec2_proj {
@@ -172,7 +178,7 @@ namespace FixedPointPhysics {
             );
         }
 
-        private static vec2_proj JoinOfPoints(vec2_proj a, vec2_proj b) {
+        private static vec2_proj JoinMeet(vec2_proj a, vec2_proj b) {
             return new vec2_proj(
                 a.x * b.y - a.y * b.x,
                 a.y * b.c - a.c * b.y,
@@ -180,11 +186,11 @@ namespace FixedPointPhysics {
             );
         }
 
-        private static vec2_proj MeetOfLines(vec2_proj a, vec2_proj b) {
-            return new vec2_proj(
-                a.x * b.y - a.y * b.x,
-                a.y * b.c - a.c * b.y,
-                a.c * b.x - a.x * b.c
+        private static vec3_qs19_12 JoinMeet(vec3_qs19_12 a, vec3_qs19_12 b) {
+            return new vec3_qs19_12(
+                a.y * b.z - a.z * b.y,
+                a.z * b.x - a.x * b.z,
+                a.x * b.y - a.y * b.x
             );
         }
 
