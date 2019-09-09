@@ -16,7 +16,19 @@ This results in 8+8 bits = 16-bit position values
 Todo:
 
 - Store Particles directly in hashmap?
+
+- Find a way to flexibly express caching region size, irrespective
+of position accuracy.
+
+
+I mean, you can of course, but then we lose the ability to
+efficiently store them by only their offset to region... Or
+do you? Hierarchical numbers are great for compression, but
+we shouldn't be using the exact same numbers for specifying
+the  resolution of the spatial hash map.
+
 - Ensure repulsion range of influence <= region size
+
 - Realize that quickly moving particles with skip interactions along
 their trajectory, and reconsider integrating with algebraic curves
 
@@ -32,15 +44,18 @@ new fixed from raw value of other fixed, uint, int, byte, sbyte, etc.
 Performance
 
 As of 09-09-19, processing 65536 partitioned 8-bit particles
-costs me around 6ms per frame. That's not bad, but we can still
-do much better.
+costs me around 6ms per frame. That's not too bad, but we can still
+do much better. Remember, Unity Team claims 200k boids, using
+floating point techniques.
 
 - Tune region size to expected particle density
 
 Having 1 particle per bucket is not very optimal use of the
 spatial hashmap
 
-- Find ways to coax vectorization for these smaller types
+- Find ways to coax vectorization for these smaller types, because
+as it stands the smaller types don't vectorize **at all**, and are
+holding performance back significantly.
 
 
 ---
@@ -133,7 +148,7 @@ public class PartitionedParticles : MonoBehaviour {
     private SimulationConfig _simConfig;
     private int _numParticlesInView;
 
-    private const float RegionSizeInMeters = 4f;
+    private const float ScaleInMeters = 8f;
 
     private void Awake() {
         _particles = new NativeArray<Particle>(NumParticles, Allocator.Persistent);
@@ -195,11 +210,11 @@ public class PartitionedParticles : MonoBehaviour {
 
         
         var cameraCenterRegion = new region(
-            new qu8_0((byte)(_cameraTransform.position.x / RegionSizeInMeters)),
-            new qu8_0((byte)(_cameraTransform.position.y / RegionSizeInMeters))
+            new qu8_0((byte)(_cameraTransform.position.x / ScaleInMeters)),
+            new qu8_0((byte)(_cameraTransform.position.y / ScaleInMeters))
         );
-        const int regionsVisibleX = 16;
-        const int regionsVisibleY = 12;
+        const int regionsVisibleX = 14;
+        const int regionsVisibleY = 10;
         var cameraMinRegion = new region(
             new qu8_0((byte)(math.max(0, cameraCenterRegion.x.v - regionsVisibleX))),
             new qu8_0((byte)(math.max(0, cameraCenterRegion.y.v - regionsVisibleY)))
@@ -347,8 +362,8 @@ public class PartitionedParticles : MonoBehaviour {
                     region region = new region(x, y);
 
                     var rPos = new float3(
-                        rScalar.ToFloat(region.x) * RegionSizeInMeters,
-                        rScalar.ToFloat(region.y) * RegionSizeInMeters,
+                        rScalar.ToFloat(region.x) * ScaleInMeters,
+                        rScalar.ToFloat(region.y) * ScaleInMeters,
                         0f
                     );
 
@@ -357,8 +372,8 @@ public class PartitionedParticles : MonoBehaviour {
                         int writeIndex = data.counter.Increment() - 1;
                         data.hues[writeIndex] = (((region.x.v * 0x747A9D7Bu + region.y.v * 0x4942CA39u) + 0xAF836EE1u) % 257) / 256f;
                         data.positions[writeIndex] = rPos + new float3(
-                            pscalar.ToFloat(p.position.x) * RegionSizeInMeters,
-                            pscalar.ToFloat(p.position.y) * RegionSizeInMeters,
+                            pscalar.ToFloat(p.position.x) * ScaleInMeters,
+                            pscalar.ToFloat(p.position.y) * ScaleInMeters,
                             0f);
                     }
 
