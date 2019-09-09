@@ -49,7 +49,9 @@ spatial hashmap
 
 Performance
 
-As of 09-09-19, 
+As of 09-09-19, processing 65536 partitioned 8-bit particles
+costs me around 6ms per frame. That's not bad, but we can still
+do much better.
 
 
 ---
@@ -138,7 +140,6 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float> _hues;
 
     private const int NumParticles = 2048 * 32;
-    private Rng _rng;
 
     private SimulationConfig _simConfig;
     private int _numParticlesInView;
@@ -154,17 +155,17 @@ public class PartitionedParticles : MonoBehaviour {
         _positions = new NativeArray<float3>(NumParticles, Allocator.Persistent);
         _hues = new NativeArray<float>(NumParticles, Allocator.Persistent);
 
-        _rng = new Rng(1234);
+        Rng rng = new Rng(1234);
 
         _simConfig = new SimulationConfig {
             frictionMul = vscalar.One - vscalar.Epsilon * 7,
         };
 
         for (int i = 0; i < NumParticles; i++) {
-            var region = vec2_qu8_0.FromInt((ushort)_rng.NextInt(0, 64), (ushort)_rng.NextInt(1, 64));
+            var region = vec2_qu8_0.FromInt((ushort)rng.NextInt(0, 64), (ushort)rng.NextInt(1, 64));
 
             var particle = new Particle() {
-                position = new position(new qu2_6((byte)_rng.NextInt(256)), new qu2_6((byte)_rng.NextInt(256))),
+                position = new position(new qu2_6((byte)rng.NextInt(256)), new qu2_6((byte)rng.NextInt(256))),
                 velocity = velocity.FromInt(0, 0),
             };
 
@@ -195,7 +196,7 @@ public class PartitionedParticles : MonoBehaviour {
         handle = findParticleForcesJob.Schedule(_partitionA, 16, handle);
 
         var updateParticlesJob = new UpdateParticlesJob() {
-            rng = new Rng((uint)Time.frameCount),
+            frameCount = (uint)Time.frameCount,
             config = _simConfig,
             particles = _particles,
             forces = _interParticleForces,
@@ -303,13 +304,15 @@ public class PartitionedParticles : MonoBehaviour {
 
     [BurstCompile]
     private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, int> {
-        public Rng rng;
+        public uint frameCount;
         public NativeArray<Particle> particles;
         [ReadOnly] public SimulationConfig config;
         [WriteOnly] public NativeMultiHashMap<region, int>.ParallelWriter partitionNext;
         [ReadOnly] public NativeArray<velocity> forces;
 
         public void ExecuteNext(region region, int pIndex) {
+            Rng rng = new Rng(frameCount * region.x.v * region.y.v);
+
             var particle = particles[pIndex];
 
             var nudge = new vec2_qs1_6(
