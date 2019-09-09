@@ -4,17 +4,37 @@ using Unity.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using Rng = Unity.Mathematics.Random;
-using Ramjet.Math.FixedPoint;
-using Ramjet.Math.LinearAlgebra;
+using Ramjet.Mathematics.FixedPoint;
+using Ramjet.Mathematics.LinearAlgebra;
 
 /*
 Experiment in which we store particles as 8-bit position values
 relative to an index in a regular 8-bit worldspace grid.
 
-This results in 8+8 bits = 16-bit position values.
+This results in 8+8 bits = 16-bit position values
 
-Todo: actually perform region changes for particles crossing
-the boundary.
+Todo:
+
+- Use better datastructures to express this
+
+NativeMultiHashMap seemed like a decent fit, but it has several
+shortcomings:
+
+- Visitor function only gives us a single particle state, plus
+its region. This is enough for making a particle brownian-walk
+on its own, but we want to add forces between nearby particles.
+This means we we want to read particles from 9 surrounding regions.
+
+It might be worth using Morton codes or something like that to
+ensure neighbouring regions lie close.
+
+- For some reason we couldn't write what we wanted back to the
+map, despite using a Mutating visitor. EDIT: Reading the ECS
+sample code for Boids, pingponging multiple hash maps is
+exactly what they do.
+
+
+
 
 ---
 
@@ -66,28 +86,33 @@ Bah....
 
  */
 
-using rScalar = Ramjet.Math.FixedPoint.qu8_0;
-using region = Ramjet.Math.LinearAlgebra.vec2_qu8_0;
-using pscalar = Ramjet.Math.FixedPoint.qu2_6;
-using position = Ramjet.Math.LinearAlgebra.vec2_qu2_6;
-using vscalar = Ramjet.Math.FixedPoint.qs1_6;
-using velocity = Ramjet.Math.LinearAlgebra.vec2_qs1_6;
+using rScalar = Ramjet.Mathematics.FixedPoint.qu8_0;
+using region = Ramjet.Mathematics.LinearAlgebra.vec2_qu8_0;
+using pscalar = Ramjet.Mathematics.FixedPoint.qu2_6;
+using position = Ramjet.Mathematics.LinearAlgebra.vec2_qu2_6;
+using vscalar = Ramjet.Mathematics.FixedPoint.qs1_6;
+using velocity = Ramjet.Mathematics.LinearAlgebra.vec2_qs1_6;
 
 public class PartitionedParticles : MonoBehaviour {
-    private NativeMultiHashMap<region, Particle> _partitionA;
-    private NativeMultiHashMap<region, Particle> _partitionB;
+    private NativeArray<Particle> _particles;
+    private NativeArray<velocity> _interParticleForces;
+    private NativeMultiHashMap<region, int> _partitionA;
+    private NativeMultiHashMap<region, int> _partitionB;
 
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 2048 * 2;
+    private const int NumParticles = 64;
     private Rng _rng;
 
     private SimulationConfig _simConfig;
 
     private void Awake() {
-        _partitionA = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
-        _partitionB = new NativeMultiHashMap<region, Particle>(NumParticles, Allocator.Persistent);
+        _particles = new NativeArray<Particle>(NumParticles, Allocator.Persistent);
+        _interParticleForces = new NativeArray<velocity>(NumParticles, Allocator.Persistent);
+        _partitionA = new NativeMultiHashMap<region, int>(NumParticles, Allocator.Persistent);
+        _partitionB = new NativeMultiHashMap<region, int>(NumParticles, Allocator.Persistent);
+
         _positions = new NativeArray<float3>(NumParticles, Allocator.Persistent);
         _hues = new NativeArray<float>(NumParticles, Allocator.Persistent);
 
@@ -106,11 +131,14 @@ public class PartitionedParticles : MonoBehaviour {
                 velocity = velocity.FromInt(0, 0),
             };
 
-            _partitionA.Add(region, particle);
+            _particles[i] = particle;
+            _partitionA.Add(region, i);
         }
     }
 
     private void OnDestroy() {
+        _particles.Dispose();
+        _interParticleForces.Dispose();
         _partitionA.Dispose();
         _partitionB.Dispose();
         _positions.Dispose();
@@ -123,16 +151,26 @@ public class PartitionedParticles : MonoBehaviour {
         var handle = new JobHandle();
 
         _partitionB.Clear();
+        var findParticleForcesJob = new FindParticleForcesJob()
+        {
+            particles = _particles,
+            self = _partitionA,
+            forces = _interParticleForces,
+        };
+        handle = findParticleForcesJob.Schedule(_partitionA, 16, handle);
+
         var updateParticlesJob = new UpdateParticlesJob() {
             rng = new Rng((uint)Time.frameCount),
             config = _simConfig,
+            particles = _particles,
+            forces = _interParticleForces,
             partitionNext = _partitionB.AsParallelWriter()
         };
         handle = updateParticlesJob.Schedule(_partitionA, 16, handle);
 
-        // var atomicCounter = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
         var atomicCounter = new JacksonDunstan.NativeCollections.NativeIntPtr(Allocator.Temp);
         var convertParticlesJob = new ConvertParticlesJob() {
+            particles = _particles,
             positions = _positions,
             hues = _hues,
             counter = atomicCounter.GetParallel()
@@ -151,59 +189,71 @@ public class PartitionedParticles : MonoBehaviour {
     }
 
     [BurstCompile]
-    private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, Particle> {
-        public Rng rng;
-        public SimulationConfig config;
-        public NativeMultiHashMap<region, Particle>.ParallelWriter partitionNext;
+    private struct FindParticleForcesJob : IJobNativeMultiHashMapVisitKeyValue<region, int> {
+        public NativeArray<Particle> particles;
+        [ReadOnly] public NativeMultiHashMap<region, int> self;
+        [WriteOnly] public NativeArray<velocity> forces;
 
-        public void ExecuteNext(region region, Particle particle) {
+        public void ExecuteNext(region region, int pIndex) {
+            var particle = particles[pIndex];
+
+            // var posLarge = new vec2_qu8_8(
+            //     new qu8_8((ushort)(((uint)(region.x.v << 8)) | particle.position.x.v)),
+            //     new qu8_8((ushort)(((uint)(region.y.v << 8)) | particle.position.y.v))
+            // );
+
+            var repulsion = velocity.FromInt(0, 0);
+            velocity Repulse(Particle p, Particle pOther) {
+                var delta = (p.position - pOther.position);
+                var deltaQuadrance = vec2_qs1_6.lengthsq(delta);
+                deltaQuadrance = deltaQuadrance << 2;
+                if (deltaQuadrance < new qs1_6(2) && deltaQuadrance != qs1_6.Zero) {
+                    return (delta / deltaQuadrance) * qs1_6.FromFloat(0.1f);
+                }
+                return velocity.FromInt(0,0);
+            }
+
+            NativeMultiHashMapIterator<region> iter;
+            int pIndexOther;
+            if (self.TryGetFirstValue(region, out pIndexOther, out iter)) {
+                if (pIndexOther != pIndex) {
+                    repulsion += Repulse(particle, particles[pIndexOther]);
+                }
+            }
+            while (self.TryGetNextValue(out pIndexOther, ref iter)) {
+                if (pIndexOther != pIndex) {
+                    repulsion += Repulse(particle, particles[pIndexOther]);
+                }
+            }
+
+            forces[pIndex] = repulsion;
+        }
+    }
+
+    [BurstCompile]
+    private struct UpdateParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, int> {
+        public Rng rng;
+        public NativeArray<Particle> particles;
+        [ReadOnly] public SimulationConfig config;
+        [WriteOnly] public NativeMultiHashMap<region, int>.ParallelWriter partitionNext;
+        [ReadOnly] public NativeArray<velocity> forces;
+
+        public void ExecuteNext(region region, int pIndex) {
+            var particle = particles[pIndex];
+
             var nudge = new vec2_qs1_6(
                 new qs1_6((sbyte)rng.NextInt(-1, 2)),
                 new qs1_6((sbyte)rng.NextInt(-1, 2)));
+
+            nudge += forces[pIndex];
 
             var posLarge = new vec2_qu8_8(
                 new qu8_8((ushort)(((uint)(region.x.v << 8)) | particle.position.x.v)),
                 new qu8_8((ushort)(((uint)(region.y.v << 8)) | particle.position.y.v))
             );
 
-            /*
-            Todo:
-
-            At this point, we have:
-
-            [8 unsigned region bits][2 unsigned subregion bits][6 unsigned fractional region bits]
-
-            And we want to add a nudge/velocity that corresponds to the scale of:
-
-            [2 unsigned subregion bits][6 unsigned fractional region bits]
-
-            But if we take the qu8_8 position + qs_1_7 velocity, it will add as if:
-
-            [8 unsigned region bits][8 unsigned fractional region bits]
-
-            Which is wrong.
-
-            ---
-
-            Options:
-
-            - Add yet extra structure to manage all manner of these nested scale changes, tracking
-            them automatically through computation graphs, ensuring that everything checks out.
-
-            This would be the most elegant and most versatile option, in the end. But it would
-            require lots of work, including analysis tools that show you where you're at.
-
-            Essentially, it gets into the notion of UNITS. 100 centimeters make 1 meter, and
-            so on.
-
-            - Unify position and velocity types for now, before operating with them.
-
-            This is the option we'll take next.
-             */
-
             particle.velocity += nudge;
             particle.velocity *= config.frictionMul;
-            // particle.velocity = nudge;
 
             posLarge.x += particle.velocity.x;
             posLarge.y += particle.velocity.y;
@@ -216,20 +266,12 @@ public class PartitionedParticles : MonoBehaviour {
             particle.position.x = new qu2_6((byte)posLarge.x.v);
             particle.position.y = new qu2_6((byte)posLarge.y.v);
 
-            partitionNext.Add(region, particle);
+            particles[pIndex] = particle;
+            partitionNext.Add(region, pIndex);
         }
-
-        /*
-        Alternate, more efficient way to represent the above:
-
-        var posLarge = new vec2_qu8_8(
-                new qu8_8((ushort)(region.x.v << 8 + particle.position.x.v)),
-                new qu8_8((ushort)(region.y.v << 8 + particle.position.y.v))
-            );
-
-        But then you need to keep track of the 2-bit extra shift in scale
-         */
     }
+
+    
 
     /*
     Convert fixed point particle state to something the floating-point-based
@@ -240,22 +282,25 @@ public class PartitionedParticles : MonoBehaviour {
     original multihashmap.
      */
     [BurstCompile]
-    private struct ConvertParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, Particle> {
+    private struct ConvertParticlesJob : IJobNativeMultiHashMapVisitKeyValue<region, int> {
+        [ReadOnly] public NativeArray<Particle> particles;
         [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float3> positions;
         [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> hues;
         public JacksonDunstan.NativeCollections.NativeIntPtr.Parallel counter;
 
-        public void ExecuteNext(region region, Particle p) {
+        public void ExecuteNext(region region, int pIndex) {
             var rPos = new float3(
                     rScalar.ToFloat(region.x) * 4f,
                     rScalar.ToFloat(region.y) * 4f,
                     0f
                 );
 
-            int index = counter.Increment();
+            int writeIndex = counter.Increment()-1;
 
-            hues[index] = (((region.x.v * 0x747A9D7Bu + region.y.v * 0x4942CA39u) + 0xAF836EE1u) % 257) / 256f;
-            positions[index] = (rPos + new float3(pscalar.ToFloat(p.position.x), pscalar.ToFloat(p.position.y), 0f));
+            var p = particles[pIndex];
+
+            hues[writeIndex] = (((region.x.v * 0x747A9D7Bu + region.y.v * 0x4942CA39u) + 0xAF836EE1u) % 257) / 256f;
+            positions[writeIndex] = (rPos + new float3(pscalar.ToFloat(p.position.x), pscalar.ToFloat(p.position.y), 0f));
 
             // var vel = new float3(vscalar.ToFloat(p.velocity.x), vscalar.ToFloat(p.velocity.y), 0f);
         }
@@ -271,6 +316,7 @@ public class PartitionedParticles : MonoBehaviour {
             var regionColor = Color.HSVToRGB(_hues[i], 0.8f, .9f);
             Gizmos.color = regionColor;
 
+            // Debug.Log(_positions[i]);
             Gizmos.DrawSphere(_positions[i], 0.1f);
             // Gizmos.color = Color.magenta;
             // Gizmos.DrawRay(_positions[i], vel);

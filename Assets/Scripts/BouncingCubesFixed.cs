@@ -5,8 +5,8 @@ using Unity.Jobs;
 using Unity.Burst;
 using Rng = Unity.Mathematics.Random;
 
-using Ramjet.Math.FixedPoint;
-using Ramjet.Math.LinearAlgebra;
+using Ramjet.Mathematics.FixedPoint;
+using Ramjet.Mathematics.LinearAlgebra;
 
 /* Todo:
  Clarify connection between Newtonian dynamics, the math, and this code

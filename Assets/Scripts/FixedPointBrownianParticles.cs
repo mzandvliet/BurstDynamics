@@ -4,8 +4,8 @@ using Unity.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using Rng = Unity.Mathematics.Random;
-using Ramjet.Math.FixedPoint;
-using Ramjet.Math.LinearAlgebra;
+using Ramjet.Mathematics.FixedPoint;
+using Ramjet.Mathematics.LinearAlgebra;
 
 /*
     First simple test where we write some physics stuff
@@ -124,10 +124,10 @@ using Ramjet.Math.LinearAlgebra;
     to be downshifted.
  */
 
-using pscalar = Ramjet.Math.FixedPoint.qs3_4;
-using position = Ramjet.Math.LinearAlgebra.vec2_qs3_4;
-using vscalar = Ramjet.Math.FixedPoint.qs1_6;
-using velocity = Ramjet.Math.LinearAlgebra.vec2_qs1_6;
+using pscalar = Ramjet.Mathematics.FixedPoint.qs3_4;
+using position = Ramjet.Mathematics.LinearAlgebra.vec2_qs3_4;
+using vscalar = Ramjet.Mathematics.FixedPoint.qs1_6;
+using velocity = Ramjet.Mathematics.LinearAlgebra.vec2_qs1_6;
 
 public class FixedPointBrownianParticles : MonoBehaviour {
     private NativeList<Particle> _particles;

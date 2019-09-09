@@ -4,19 +4,19 @@ using Unity.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using Rng = Unity.Mathematics.Random;
-using Ramjet.Math.FixedPoint;
-using Ramjet.Math.LinearAlgebra;
+using Ramjet.Mathematics.FixedPoint;
+using Ramjet.Mathematics.LinearAlgebra;
 
-using fix = Ramjet.Math.FixedPoint.qs15_16;
-using fix4 = Ramjet.Math.LinearAlgebra.vec4_qs15_16;
+using fix = Ramjet.Mathematics.FixedPoint.qs15_16;
+using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs15_16;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-// using fix = Ramjet.Math.FixedPoint.qs1_14;
-// using fix4 = Ramjet.Math.LinearAlgebra.vec4_qs1_14;
+// using fix = Ramjet.Mathematics.FixedPoint.qs1_14;
+// using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs1_14;
 
-// using fix = Ramjet.Math.FixedPoint.qs0_7;
-// using fix4 = Ramjet.Math.LinearAlgebra.vec4_qs0_7;
+// using fix = Ramjet.Mathematics.FixedPoint.qs0_7;
+// using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs0_7;
 
 public class BurstVectorizationTest : MonoBehaviour
 {

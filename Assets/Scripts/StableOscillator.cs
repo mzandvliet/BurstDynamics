@@ -1,7 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Ramjet.Math.FixedPoint;
+using Ramjet.Mathematics.FixedPoint;
 using Unity.Mathematics;
 using Unity.Collections;
 
