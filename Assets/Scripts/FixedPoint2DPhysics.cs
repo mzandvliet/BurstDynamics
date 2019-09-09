@@ -81,14 +81,20 @@ If I try to naively convert from fixed point to projective int
 using:
 
 return new vec2_proj(
-    qs19_12.One.v,
+    qs19_12.One.v, // 4096
     v.x.v,
     v.y.v
 );
 
-Then coefficients get LARGE quick once you start arithmetic.
+Then coefficients get LARGE quick once you start arithmetic,
+because taht value of C gets multiplied into everything. This
+quickly overflows, sometimes even after a single Join or Meet.
+
 Instead I've opted to use fixed point values in the code
 below for [c,x,y]
+
+Still, we might be able to find a better fusion of projective
+and fixed point arithmetic. Gotta keep experimenting.
 
 */
 
@@ -136,8 +142,8 @@ namespace FixedPointPhysics {
 
             // The above trivial version with small integers works fine
 
-            var a_a_fp = vec3_qs19_12.FromInt(10, 0, 1);
-            var a_b_fp = vec3_qs19_12.FromInt(-10, 0, 1);
+            var a_a_fp = vec3_qs19_12.FromInt(10, 2, 1);
+            var a_b_fp = vec3_qs19_12.FromInt(-10, 2, 1);
             var b_a_fp = vec3_qs19_12.FromInt(1, -10, 1);
             var b_b_fp = vec3_qs19_12.FromInt(1, 10, 1);
 
@@ -148,6 +154,23 @@ namespace FixedPointPhysics {
             Debug.Log(meet_fp.x / meet_fp.z + ", " + meet_fp.y / meet_fp.z);
 
             // This did effectively the same thing with fixed point numbers
+
+            // Let's check some point-line incidences
+            var incidenceHi = Incidence(joinA_fp, vec3_qs19_12.FromInt(-1, 5, 1)); // point above line
+            var incidenceOn = Incidence(joinA_fp, vec3_qs19_12.FromInt( 1, 2, 1)); // point on line
+            var incidenceLo = Incidence(joinA_fp, vec3_qs19_12.FromInt( 5, 1, 1)); // point below line
+            Debug.Log(incidenceHi);
+            Debug.Log(incidenceOn); 
+            Debug.Log(incidenceLo);
+
+            /*
+            Works well! Appears to work great as a distance-to-line function, too
+            
+            Important though: the returned values are proportional to distance, but
+            scaled by the length of the segment that is checked against. E.g. for a
+            segment of length 20, with a point -2 units away from it, the function will
+            return -40.
+            */
         }
 
         private struct vec2_proj {
@@ -160,22 +183,6 @@ namespace FixedPointPhysics {
                 this.x = x;
                 this.y = y;
             }
-        }
-
-        private static vec2_proj ToProjective(vec2_qs19_12 v) {
-            return new vec2_proj(
-                qs19_12.One.v,
-                v.x.v,
-                v.y.v
-            );
-        }
-
-        private static vec2_qs19_12 ToFixed(vec2_proj v) {
-            var scale = qs19_12.One.v / v.c;
-            return new vec2_qs19_12(
-                new qs19_12(v.x * scale),
-                new qs19_12(v.y * scale)
-            );
         }
 
         private static vec2_proj JoinMeet(vec2_proj a, vec2_proj b) {
@@ -192,6 +199,10 @@ namespace FixedPointPhysics {
                 a.z * b.x - a.x * b.z,
                 a.x * b.y - a.y * b.x
             );
+        }
+
+        private static qs19_12 Incidence(vec3_qs19_12 a, vec3_qs19_12 b) {
+            return a.z * b.z + a.x * b.x + a.y * b.y;
         }
 
         private void Update() {
