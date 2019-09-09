@@ -84,6 +84,30 @@ in order to continue working with it in terms of unsigneds,
 and also meaning you lose the MSB for information storage.
 Bah....
 
+** Performance, Arithmetic, Pipelining **
+
+This way of writing fixed point logic has some advantages:
+
+- Determinism (which is what we wanted)
+- Lower memory footprint
+- More control over precision
+    - Too much precision starts to stick out
+
+But the disadvantages:
+- Code becomes more complex
+- FP types are relatively unwieldy in C#
+- Without toolchain you have to maintain a lot of mental state
+- Performance is far lower than theoretical max. 8 bit
+arithmetic, if it could be pipelined, would go superfast,
+but Burst isn't able to transform the current code much.
+
+
+- Type conversion
+
+float <-> fixed
+fixed_a <-> fixed_b
+
+new fixed from raw value of other fixed, uint, int, byte, sbyte, etc.
  */
 
 using rScalar = Ramjet.Mathematics.FixedPoint.qu8_0;
@@ -102,7 +126,7 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 64;
+    private const int NumParticles = 2048;
     private Rng _rng;
 
     private SimulationConfig _simConfig;
@@ -154,7 +178,7 @@ public class PartitionedParticles : MonoBehaviour {
         var findParticleForcesJob = new FindParticleForcesJob()
         {
             particles = _particles,
-            self = _partitionA,
+            partition = _partitionA,
             forces = _interParticleForces,
         };
         handle = findParticleForcesJob.Schedule(_partitionA, 16, handle);
@@ -191,38 +215,53 @@ public class PartitionedParticles : MonoBehaviour {
     [BurstCompile]
     private struct FindParticleForcesJob : IJobNativeMultiHashMapVisitKeyValue<region, int> {
         public NativeArray<Particle> particles;
-        [ReadOnly] public NativeMultiHashMap<region, int> self;
+        [ReadOnly] public NativeMultiHashMap<region, int> partition;
         [WriteOnly] public NativeArray<velocity> forces;
+
+        private static vec2_qu8_8 ToWorld(region region, position pos) {
+            return new vec2_qu8_8(
+                new qu8_8((ushort)(((uint)(region.x.v << 8)) | pos.x.v)),
+                new qu8_8((ushort)(((uint)(region.y.v << 8)) | pos.y.v))
+            );
+        }
 
         public void ExecuteNext(region region, int pIndex) {
             var particle = particles[pIndex];
+            var posLarge = ToWorld(region, particle.position);
 
-            // var posLarge = new vec2_qu8_8(
-            //     new qu8_8((ushort)(((uint)(region.x.v << 8)) | particle.position.x.v)),
-            //     new qu8_8((ushort)(((uint)(region.y.v << 8)) | particle.position.y.v))
-            // );
+            IterateRegion(this, region, pIndex, posLarge);
+        }
+
+        void IterateRegion(FindParticleForcesJob data, region region, int pIndex, vec2_qu8_8 posLarge) {
+            velocity Repulse(vec2_qu8_8 pos, vec2_qu8_8 posOther) {
+                var delta = pos - posOther;
+                var deltaQuadrance = vec2_qs7_8.lengthsq(delta);
+                deltaQuadrance = deltaQuadrance << 4;
+                if (deltaQuadrance != qs7_8.Zero) {
+                    var nudge = (delta / deltaQuadrance) * qs7_8.FromFloat(0.1f);
+                    return new vec2_qs1_6(new qs1_6((sbyte)nudge.x.v), new qs1_6((sbyte)nudge.y.v));
+                }
+                return velocity.FromInt(0, 0);
+            }
 
             var repulsion = velocity.FromInt(0, 0);
-            velocity Repulse(Particle p, Particle pOther) {
-                var delta = (p.position - pOther.position);
-                var deltaQuadrance = vec2_qs1_6.lengthsq(delta);
-                deltaQuadrance = deltaQuadrance << 2;
-                if (deltaQuadrance < new qs1_6(2) && deltaQuadrance != qs1_6.Zero) {
-                    return (delta / deltaQuadrance) * qs1_6.FromFloat(0.1f);
-                }
-                return velocity.FromInt(0,0);
-            }
-
+            
+            /*
+            Note: to be able to get the relative vectors between positions in
+            neighboring regions, we only really need 1 extra bit of integer precision,
+            but here we're tacking on 8 to construct a full world position.
+             */
+            
             NativeMultiHashMapIterator<region> iter;
             int pIndexOther;
-            if (self.TryGetFirstValue(region, out pIndexOther, out iter)) {
+            if (data.partition.TryGetFirstValue(region, out pIndexOther, out iter)) {
                 if (pIndexOther != pIndex) {
-                    repulsion += Repulse(particle, particles[pIndexOther]);
+                    repulsion += Repulse(posLarge, ToWorld(region, data.particles[pIndexOther].position));
                 }
             }
-            while (self.TryGetNextValue(out pIndexOther, ref iter)) {
+            while (data.partition.TryGetNextValue(out pIndexOther, ref iter)) {
                 if (pIndexOther != pIndex) {
-                    repulsion += Repulse(particle, particles[pIndexOther]);
+                    repulsion += Repulse(posLarge, ToWorld(region, data.particles[pIndexOther].position));
                 }
             }
 
