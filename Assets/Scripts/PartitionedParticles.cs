@@ -128,7 +128,7 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 2048 * 32;
+    private const int NumParticles = 2048 * 64;
 
     private SimulationConfig _simConfig;
     private int _numParticlesInView;
@@ -151,7 +151,7 @@ public class PartitionedParticles : MonoBehaviour {
         };
 
         for (int i = 0; i < NumParticles; i++) {
-            var region = vec2_qu8_0.FromInt((ushort)rng.NextInt(0, 64), (ushort)rng.NextInt(0, 64));
+            var region = vec2_qu8_0.FromInt((ushort)rng.NextInt(0, 255), (ushort)rng.NextInt(0, 64));
 
             var particle = new Particle() {
                 position = new position(new qu0_8((byte)rng.NextInt(256)), new qu0_8((byte)rng.NextInt(256))),
@@ -182,7 +182,7 @@ public class PartitionedParticles : MonoBehaviour {
             partition = _partitionA,
             forces = _interParticleForces,
         };
-        handle = findParticleForcesJob.Schedule(_partitionA, 16, handle);
+        handle = findParticleForcesJob.Schedule(_partitionA, 2, handle);
 
         var updateParticlesJob = new UpdateParticlesJob() {
             frameCount = (uint)Time.frameCount,
@@ -191,7 +191,7 @@ public class PartitionedParticles : MonoBehaviour {
             forces = _interParticleForces,
             partitionNext = _partitionB.AsParallelWriter()
         };
-        handle = updateParticlesJob.Schedule(_partitionA, 16, handle);
+        handle = updateParticlesJob.Schedule(_partitionA, 2, handle);
 
         
         var cameraCenterRegion = new region(
