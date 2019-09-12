@@ -12,12 +12,6 @@ using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs15_16;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-// using fix = Ramjet.Mathematics.FixedPoint.qs1_14;
-// using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs1_14;
-
-// using fix = Ramjet.Mathematics.FixedPoint.qs0_7;
-// using fix4 = Ramjet.Mathematics.LinearAlgebra.vec4_qs0_7;
-
 public class BurstVectorizationTest : MonoBehaviour
 {
     const int count = 128 * 128 * 32;
