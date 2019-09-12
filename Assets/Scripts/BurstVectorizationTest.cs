@@ -32,6 +32,10 @@ public class BurstVectorizationTest : MonoBehaviour
         fixed4InputA = new NativeArray<fix4>(count, Allocator.Persistent);
         fixed4InputB = new NativeArray<fix4>(count, Allocator.Persistent);
         fixedOutput = new NativeArray<fix>(count, Allocator.Persistent);
+
+        var a = new qs15_16(2820.93201f);
+        var b = new qs15_16(300.201435f);
+        Debug.Log("Multiplied: " + a * b + ", should be: " + (2820.93201f * 3.201435f));
     }
 
     private void OnDestroy() {
@@ -44,52 +48,52 @@ public class BurstVectorizationTest : MonoBehaviour
         fixedOutput.Dispose();
     }
 
-    private void Update() {
-        var job_float4 = new float4Job()
-        {
-            _inputA = float4InputA,
-            _inputB = float4InputB,
-            _output = floatOutput,
-        };
+    // private void Update() {
+    //     var job_float4 = new float4Job()
+    //     {
+    //         _inputA = float4InputA,
+    //         _inputB = float4InputB,
+    //         _output = floatOutput,
+    //     };
 
-        var job_float4_parallel = new float4JobParallel()
-        {
-            _inputA = float4InputA,
-            _inputB = float4InputB,
-            _output = floatOutput,
-        };
+    //     var job_float4_parallel = new float4JobParallel()
+    //     {
+    //         _inputA = float4InputA,
+    //         _inputB = float4InputB,
+    //         _output = floatOutput,
+    //     };
 
-        var job_fixed4 = new fix4Job()
-        {
-            _inputA = fixed4InputA,
-            _inputB = fixed4InputB,
-            _output = fixedOutput,
-        };
+    //     var job_fixed4 = new fix4Job()
+    //     {
+    //         _inputA = fixed4InputA,
+    //         _inputB = fixed4InputB,
+    //         _output = fixedOutput,
+    //     };
 
-        var job_fixed4_parallel = new fix4JobParallel()
-        {
-            _inputA = fixed4InputA,
-            _inputB = fixed4InputB,
-            _output = fixedOutput,
-        };
+    //     var job_fixed4_parallel = new fix4JobParallel()
+    //     {
+    //         _inputA = fixed4InputA,
+    //         _inputB = fixed4InputB,
+    //         _output = fixedOutput,
+    //     };
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        job_float4.Schedule().Complete();
-        watch.Stop();
-        Debug.Log("float4Single: " + watch.ElapsedTicks);
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        job_fixed4.Schedule().Complete();
-        watch.Stop();
-        Debug.Log("fix4Single: " + watch.ElapsedTicks);
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        job_float4_parallel.Schedule(float4InputA.Length, 32).Complete();
-        watch.Stop();
-        Debug.Log("float4Multi: " + watch.ElapsedTicks);
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        job_fixed4_parallel.Schedule(fixed4InputA.Length, 32).Complete();
-        watch.Stop();
-        Debug.Log("fix4Multi: " + watch.ElapsedTicks);
-    }
+    //     var watch = System.Diagnostics.Stopwatch.StartNew();
+    //     job_float4.Schedule().Complete();
+    //     watch.Stop();
+    //     Debug.Log("float4Single: " + watch.ElapsedTicks);
+    //     watch = System.Diagnostics.Stopwatch.StartNew();
+    //     job_fixed4.Schedule().Complete();
+    //     watch.Stop();
+    //     Debug.Log("fix4Single: " + watch.ElapsedTicks);
+    //     watch = System.Diagnostics.Stopwatch.StartNew();
+    //     job_float4_parallel.Schedule(float4InputA.Length, 32).Complete();
+    //     watch.Stop();
+    //     Debug.Log("float4Multi: " + watch.ElapsedTicks);
+    //     watch = System.Diagnostics.Stopwatch.StartNew();
+    //     job_fixed4_parallel.Schedule(fixed4InputA.Length, 32).Complete();
+    //     watch.Stop();
+    //     Debug.Log("fix4Multi: " + watch.ElapsedTicks);
+    // }
 
     // float4
 

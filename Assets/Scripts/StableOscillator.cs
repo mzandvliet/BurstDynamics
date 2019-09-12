@@ -38,11 +38,11 @@ public class StableOscillator : MonoBehaviour
 
         _head = 0;
         _oscStates[_head] = new Osc {
-            c = qs1_14.FromInt(1),
-            s = qs1_14.FromInt(0)
+            c = 1,
+            s = 0
         };
 
-        a = qu1_7.FromFloat(0.01f);
+        a = 0.01f;
         // a = new qs15_16(256 * 31 + 128 + 5); // Allllmost hitting the same phase every time
     }
 
@@ -68,8 +68,8 @@ public class StableOscillator : MonoBehaviour
         for (int i = 0; i < _oscStates.Length; i++) {
             var idx = (_head + 1 + i) % _oscStates.Length;
             var pos = new float3(
-                qs1_14.ToFloat(_oscStates[idx].c),
-                qs1_14.ToFloat(_oscStates[idx].s),
+                _oscStates[idx].c,
+                _oscStates[idx].s,
                 0f
             );
 

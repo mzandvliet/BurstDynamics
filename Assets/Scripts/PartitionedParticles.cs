@@ -166,11 +166,11 @@ public class PartitionedParticles : MonoBehaviour {
         };
 
         for (int i = 0; i < NumParticles; i++) {
-            var region = vec2_qu8_0.FromInt((ushort)rng.NextInt(0, 255), (ushort)rng.NextInt(0, 64));
+            var region = vec2_qu8_0.Raw((byte)rng.NextInt(0, 255), (byte)rng.NextInt(0, 64));
 
             var particle = new Particle() {
-                position = new position(new qu0_8((byte)rng.NextInt(256)), new qu0_8((byte)rng.NextInt(256))),
-                velocity = velocity.FromInt(0, 0),
+                position = position.Raw((byte)rng.NextInt(256), (byte)rng.NextInt(256)),
+                velocity = new velocity(0, 0),
             };
 
             _particles[i] = particle;
@@ -210,18 +210,18 @@ public class PartitionedParticles : MonoBehaviour {
 
         
         var cameraCenterRegion = new region(
-            new qu8_0((byte)(_cameraTransform.position.x / ScaleInMeters)),
-            new qu8_0((byte)(_cameraTransform.position.y / ScaleInMeters))
+            _cameraTransform.position.x / ScaleInMeters,
+            _cameraTransform.position.y / ScaleInMeters
         );
         const int regionsVisibleX = 14;
         const int regionsVisibleY = 10;
         var cameraMinRegion = new region(
-            new qu8_0((byte)(math.max(0, cameraCenterRegion.x.v - regionsVisibleX))),
-            new qu8_0((byte)(math.max(0, cameraCenterRegion.y.v - regionsVisibleY)))
+            math.max(0, cameraCenterRegion.x.v - regionsVisibleX),
+            math.max(0, cameraCenterRegion.y.v - regionsVisibleY)
         );
         var cameraMaxRegion = new region(
-            new qu8_0((byte)(math.min(byte.MaxValue, cameraCenterRegion.x.v + regionsVisibleX))),
-            new qu8_0((byte)(math.min(byte.MaxValue, cameraCenterRegion.y.v + regionsVisibleY)))
+            math.min(byte.MaxValue, cameraCenterRegion.x.v + regionsVisibleX),
+            math.min(byte.MaxValue, cameraCenterRegion.y.v + regionsVisibleY)
         );
 
         var atomicCounter = new JacksonDunstan.NativeCollections.NativeIntPtr(Allocator.Temp);
@@ -250,8 +250,8 @@ public class PartitionedParticles : MonoBehaviour {
 
     private static vec2_qu8_8 ToWorld(region region, position pos) {
         return new vec2_qu8_8(
-            new qu8_8((ushort)(((uint)(region.x.v << 8)) | pos.x.v)),
-            new qu8_8((ushort)(((uint)(region.y.v << 8)) | pos.y.v))
+            qu8_8.Raw((ushort)(((uint)(region.x.v << 8)) | pos.x.v)),
+            qu8_8.Raw((ushort)(((uint)(region.y.v << 8)) | pos.y.v))
         );
     }
 
@@ -274,13 +274,13 @@ public class PartitionedParticles : MonoBehaviour {
                 var deltaQuadrance = vec2_qs7_8.lengthsq(delta);
                 deltaQuadrance = deltaQuadrance << 4;
                 if (deltaQuadrance != qs7_8.Zero) {
-                    var nudge = (delta / deltaQuadrance) * qs7_8.FromFloat(0.1f);
-                    return new vec2_qs0_7(new qs0_7((sbyte)nudge.x.v), new qs0_7((sbyte)nudge.y.v));
+                    var nudge = (delta / deltaQuadrance) * new qs7_8(0.1f);
+                    return new vec2_qs0_7(qs0_7.Raw((sbyte)nudge.x.v), qs0_7.Raw((sbyte)nudge.y.v));
                 }
-                return velocity.FromInt(0, 0);
+                return new velocity(0, 0);
             }
 
-            var repulsion = velocity.FromInt(0, 0);
+            var repulsion = new velocity(0, 0);
             
             /*
             Note: to be able to get the relative vectors between positions in
@@ -319,9 +319,13 @@ public class PartitionedParticles : MonoBehaviour {
 
             var particle = particles[pIndex];
 
-            var nudge = new vec2_qs0_7(
-                new qs0_7((sbyte)rng.NextInt(-1, 2)),
-                new qs0_7((sbyte)rng.NextInt(-1, 2)));
+            var nudge = vec2_qs0_7.Raw(
+                (sbyte)rng.NextInt(-1, 2),
+                (sbyte)rng.NextInt(-1, 2));
+
+            // var nudge = new vec2_qs0_7(
+            //     rng.NextInt(-1, 2),
+            //     rng.NextInt(-1, 2));
 
             nudge += forces[pIndex];
 
@@ -334,12 +338,12 @@ public class PartitionedParticles : MonoBehaviour {
             posLarge.y += particle.velocity.y;
 
             region = new vec2_qu8_0(
-                new qu8_0((byte)(posLarge.x.v >> 8)),
-                new qu8_0((byte)(posLarge.y.v >> 8))
+                qu8_0.Raw((byte)(posLarge.x.v >> 8)),
+                qu8_0.Raw((byte)(posLarge.y.v >> 8))
             );
 
-            particle.position.x = new qu0_8((byte)posLarge.x.v);
-            particle.position.y = new qu0_8((byte)posLarge.y.v);
+            particle.position.x = qu0_8.Raw((byte)posLarge.x.v);
+            particle.position.y = qu0_8.Raw((byte)posLarge.y.v);
 
             particles[pIndex] = particle;
             partitionNext.Add(region, pIndex);
@@ -362,8 +366,8 @@ public class PartitionedParticles : MonoBehaviour {
                     region region = new region(x, y);
 
                     var rPos = new float3(
-                        rScalar.ToFloat(region.x) * ScaleInMeters,
-                        rScalar.ToFloat(region.y) * ScaleInMeters,
+                        (float)region.x * ScaleInMeters,
+                        (float)region.y * ScaleInMeters,
                         0f
                     );
 
@@ -372,8 +376,8 @@ public class PartitionedParticles : MonoBehaviour {
                         int writeIndex = data.counter.Increment() - 1;
                         data.hues[writeIndex] = (((region.x.v * 0x747A9D7Bu + region.y.v * 0x4942CA39u) + 0xAF836EE1u) % 257) / 256f;
                         data.positions[writeIndex] = rPos + new float3(
-                            pscalar.ToFloat(p.position.x) * ScaleInMeters,
-                            pscalar.ToFloat(p.position.y) * ScaleInMeters,
+                            (float)p.position.x * ScaleInMeters,
+                            (float)p.position.y * ScaleInMeters,
                             0f);
                     }
 

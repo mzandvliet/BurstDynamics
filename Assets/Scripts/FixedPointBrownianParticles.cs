@@ -141,13 +141,13 @@ public class FixedPointBrownianParticles : MonoBehaviour {
 
         for (int i = 0; i < NumParticles; i++) {
             _particles.Add(new Particle() {
-                position = position.FromFloat(_rng.NextFloat(-1f, 1f), _rng.NextFloat(-1f, 1f)),
-                velocity = velocity.FromInt(0, 0),
+                position = new position(_rng.NextFloat(-1f, 1f), _rng.NextFloat(-1f, 1f)),
+                velocity = new velocity(0, 0),
             });
         }
 
         // var friction = q2 4_7.One - q24_7.Epsilon;
-        var friction = pscalar.FromFloat(0.9f);
+        pscalar friction = 0.9f;
 
         /*
         Problem: With friction values [0,1), and very small timesteps,
@@ -201,8 +201,8 @@ public class FixedPointBrownianParticles : MonoBehaviour {
             var p = _particles[i];
 
             var nudge = new velocity(
-                new vscalar((sbyte)_rng.NextInt(-1, 2)),
-                new vscalar((sbyte)_rng.NextInt(-1, 2)));
+                vscalar.Raw((sbyte)_rng.NextInt(-1, 2)),
+                vscalar.Raw((sbyte)_rng.NextInt(-1, 2)));
 
             // avgNudgeX += nudge.x.v;
 
@@ -223,7 +223,7 @@ public class FixedPointBrownianParticles : MonoBehaviour {
             // scaledVelocity.x.v += (sbyte)(_rng.NextInt(-1, 2));
             // scaledVelocity.y.v += (sbyte)(_rng.NextInt(-1, 2));
 
-            avgVelStepX += vscalar.ToDouble(scaledVelocity.x);
+            avgVelStepX += (double)scaledVelocity.x;
 
             p.position.x += scaledVelocity.x;
             p.position.y += scaledVelocity.y;
@@ -243,8 +243,8 @@ public class FixedPointBrownianParticles : MonoBehaviour {
 
         for (int i = 0; i < _particles.Length; i++) {
             var p = _particles[i];
-            var pos = new float3(pscalar.ToFloat(p.position.x) * 2f, pscalar.ToFloat(p.position.y) * 2f, 0f);
-            var vel = new float3(vscalar.ToFloat(p.velocity.x) * 2f, vscalar.ToFloat(p.velocity.y) * 2f, 0f);
+            var pos = new float3(p.position.x * 2, p.position.y * 2, 0f);
+            var vel = new float3(p.velocity.x * 2, p.velocity.y * 2, 0f);
 
             Gizmos.color = Color.cyan;
             Gizmos.DrawSphere(pos, 0.05f);

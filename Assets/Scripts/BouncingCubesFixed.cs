@@ -37,7 +37,7 @@ public class BouncingCubesFixed : MonoBehaviour {
         _rng = new Rng(1234);
 
         for (int i = 0; i < NumCubes; i++) {
-            var pos = vec2_qs15_16.FromFloat(
+            var pos = new vec2_qs15_16(
                 _rng.NextFloat(-20, 20f),
                 _rng.NextFloat(1f, 9f));
             AddCube(_points, _sticks, i, pos, ref _rng);
@@ -55,8 +55,8 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         const float _spawnImpulse = 0.3f;
 
-        cornerPos = pos + vec2_qs15_16.FromInt(0, 0);
-        cornerPosOffset = vec2_qs15_16.FromFloat(
+        cornerPos = pos + new vec2_qs15_16(0, 0);
+        cornerPosOffset = new vec2_qs15_16(
             rng.NextFloat(-_spawnImpulse, _spawnImpulse),
             rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 0] = new Point
@@ -65,18 +65,17 @@ public class BouncingCubesFixed : MonoBehaviour {
             Now = cornerPos + cornerPosOffset
         };
 
-        cornerPos = pos + vec2_qs15_16.FromInt(0, 1);
-        cornerPosOffset = vec2_qs15_16.FromFloat(
+        cornerPos = pos + new vec2_qs15_16(0, 1);
+        cornerPosOffset = new vec2_qs15_16(
             rng.NextFloat(-_spawnImpulse, _spawnImpulse),
             rng.NextFloat(-_spawnImpulse, _spawnImpulse));
-        points[pointIdx + 1] = new Point
-        {
+        points[pointIdx + 1] = new Point {
             Last = cornerPos,
             Now = cornerPos + cornerPosOffset
         };
 
-        cornerPos = pos + vec2_qs15_16.FromInt(1, 1);
-        cornerPosOffset = vec2_qs15_16.FromFloat(
+        cornerPos = pos + new vec2_qs15_16(1, 1);
+        cornerPosOffset = new vec2_qs15_16(
             rng.NextFloat(-_spawnImpulse, _spawnImpulse),
             rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 2] = new Point
@@ -85,8 +84,8 @@ public class BouncingCubesFixed : MonoBehaviour {
             Now = cornerPos + cornerPosOffset
         };
 
-        cornerPos = pos + vec2_qs15_16.FromInt(1, 0);
-        cornerPosOffset = vec2_qs15_16.FromFloat(
+        cornerPos = pos + new vec2_qs15_16(1, 0);
+        cornerPosOffset = new vec2_qs15_16(
             rng.NextFloat(-_spawnImpulse, _spawnImpulse),
             rng.NextFloat(-_spawnImpulse, _spawnImpulse));
         points[pointIdx + 3] = new Point
@@ -101,37 +100,37 @@ public class BouncingCubesFixed : MonoBehaviour {
         {
             A = pointIdx + 0,
             B = pointIdx + 1,
-            Length = qs15_16.FromInt(1)
+            Length = 1
         };
         sticks[stickIdx++] = new Stick
         {
             A = pointIdx + 1,
             B = pointIdx + 2,
-            Length = qs15_16.FromInt(1)
+            Length = 1
         };
         sticks[stickIdx++] = new Stick
         {
             A = pointIdx + 2,
             B = pointIdx + 3,
-            Length = qs15_16.FromInt(1)
+            Length = 1
         };
         sticks[stickIdx++] = new Stick
         {
             A = pointIdx + 3,
             B = pointIdx + 0,
-            Length = qs15_16.FromInt(1)
+            Length = 1
         };
         sticks[stickIdx++] = new Stick
         {
             A = pointIdx + 0,
             B = pointIdx + 2,
-            Length = qs15_16.FromFloat(math.sqrt(2.0f))
+            Length = math.sqrt(2.0f)
         };
         sticks[stickIdx++] = new Stick
         {
             A = pointIdx + 1,
             B = pointIdx + 3,
-            Length = qs15_16.FromFloat(math.sqrt(2.0f))
+            Length = math.sqrt(2.0f)
         };
     }
 
@@ -226,7 +225,7 @@ public class BouncingCubesFixed : MonoBehaviour {
     }
 
     private static float3 toFloat3(vec2_qs15_16 v) {
-        return new float3(qs15_16.ToFloat(v.x), qs15_16.ToFloat(v.y), 0f);
+        return new float3(v.x, v.y, 0f);
     }
 
     public struct Point {
@@ -246,7 +245,7 @@ public class BouncingCubesFixed : MonoBehaviour {
 
         public void Execute() {
             qs15_16 friction = qs15_16.One - qs15_16.Epsilon * (512 * 2);
-            vec2_qs15_16 g = vec2_qs15_16.FromFloat(0f, -0.005f);
+            vec2_qs15_16 g = new vec2_qs15_16(0f, -0.005f);
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];
@@ -266,9 +265,9 @@ public class BouncingCubesFixed : MonoBehaviour {
         public NativeArray<Point> Points;
 
         public void Execute() {
-            vec2_qs15_16 box = vec2_qs15_16.FromFloat(20f, 10f);
+            vec2_qs15_16 box = new vec2_qs15_16(20f, 10f);
 
-            qs15_16 restitution = qs15_16.FromFloat(0.4f);
+            qs15_16 restitution = 0.4f;
 
             for (int i = 0; i < Points.Length; i++) {
                 Point p = Points[i];

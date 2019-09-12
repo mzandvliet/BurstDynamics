@@ -125,20 +125,20 @@ namespace FixedPointPhysics {
         private const int StepsPerSecond = 64;
         private const int ShiftToFrameDelta = 6; // log2(StepsPerSecond)
 
-        private vec2_qs6_9 _gravity = vec2_qs6_9.FromFloat(0f, -9.81f / StepsPerSecond);
+        private vec2_qs6_9 _gravity = new vec2_qs6_9(0f, -9.81f / StepsPerSecond);
 
         private void Awake() {
             _bodies = new NativeArray<Rigidbody>(1, Allocator.Persistent);
             _staticSegments = new NativeArray<Segment>(1, Allocator.Persistent);
 
             _bodies[0] = new Rigidbody() {
-                position = vec2_qs19_12.FromInt(-8, 10),
-                velocity = vec2_qs6_9.FromFloat(3f, 1f)
+                position = new vec2_qs19_12(-8, 10),
+                velocity = new vec2_qs6_9(3f, 1f)
             };
 
             _staticSegments[0] = new Segment() {
-                a = vec2_qs19_12.FromInt(-10, 0),
-                b = vec2_qs19_12.FromInt(10, 0)
+                a = new vec2_qs19_12(-10, 0),
+                b = new vec2_qs19_12(10, 0)
             };
         }
 
@@ -157,8 +157,8 @@ namespace FixedPointPhysics {
                 AddAssign(ref body.position, Shr(body.velocity, ShiftToFrameDelta));
 
                 var bodySegment = new Segment {
-                    a = body.position + vec2_qs19_12.FromFloat(0f, 0.25f),
-                    b = body.position - vec2_qs19_12.FromFloat(0f, 0.25f),
+                    a = body.position + new vec2_qs19_12(0f, 0.25f),
+                    b = body.position - new vec2_qs19_12(0f, 0.25f),
                 };
 
                 for (int s = 0; s < _staticSegments.Length; s++) {
@@ -176,7 +176,7 @@ namespace FixedPointPhysics {
                         var segNormal = new vec2_qs19_12(segDelta.y * -1, segDelta.x);
 
                         var velocity = Cast(body.velocity);
-                        velocity = velocity - segNormal * (vec2_qs19_12.dot(velocity * qs19_12.FromInt(2), segNormal) / vec2_qs19_12.dot(segNormal, segNormal));
+                        velocity = velocity - segNormal * (vec2_qs19_12.dot(velocity * 2, segNormal) / vec2_qs19_12.dot(segNormal, segNormal));
 
                         body.velocity = Cast(velocity);
                     }
@@ -202,13 +202,13 @@ namespace FixedPointPhysics {
                 var segment = _staticSegments[i];
 
                 var posA = new float3(
-                    qs19_12.ToFloat(segment.a.x),
-                    qs19_12.ToFloat(segment.a.y),
+                    segment.a.x,
+                    segment.a.y,
                     0f);
 
                 var posB = new float3(
-                    qs19_12.ToFloat(segment.b.x),
-                    qs19_12.ToFloat(segment.b.y),
+                    segment.b.x,
+                    segment.b.y,
                     0f);
 
                 Gizmos.DrawLine(posA, posB);
@@ -218,8 +218,8 @@ namespace FixedPointPhysics {
                 var body = _bodies[i];
 
                 var pos = new float3(
-                    qs19_12.ToFloat(body.position.x),
-                    qs19_12.ToFloat(body.position.y),
+                    body.position.x,
+                    body.position.y,
                     0f);
 
                 var boxTransform = Matrix4x4.TRS(
@@ -233,25 +233,26 @@ namespace FixedPointPhysics {
             }
         }
 
+        // Todo: the below should come from the generator
         private static vec2_qs19_12 Cast(vec2_qs6_9 v) {
             return new vec2_qs19_12(
-                new qs19_12(v.x.v >> 3),
-                new qs19_12(v.y.v >> 3)
+                qs19_12.Raw(v.x.v >> 3),
+                qs19_12.Raw(v.y.v >> 3)
             );
         }
 
         private static vec2_qs6_9 Cast(vec2_qs19_12 v) {
             return new vec2_qs6_9(
-                new qs6_9((short)(v.x.v << 3)),
-                new qs6_9((short)(v.y.v << 3))
+                qs6_9.Raw((short)(v.x.v << 3)),
+                qs6_9.Raw((short)(v.y.v << 3))
             );
         }
 
         private static vec2_qs3_12 Shr(vec2_qs6_9 v, int shift) {
             // Combines a shift right by six and a reinterpret to +3 fractional bits
             return new vec2_qs3_12(
-                new qs3_12((short)(v.x.v >> (shift - 3))),
-                new qs3_12((short)(v.y.v >> (shift - 3)))
+                qs3_12.Raw((short)(v.x.v >> (shift - 3))),
+                qs3_12.Raw((short)(v.y.v >> (shift - 3)))
             );
         }
 
