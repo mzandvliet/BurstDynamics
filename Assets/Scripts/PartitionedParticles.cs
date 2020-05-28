@@ -143,7 +143,7 @@ public class PartitionedParticles : MonoBehaviour {
     private NativeArray<float3> _positions;
     private NativeArray<float> _hues;
 
-    private const int NumParticles = 2048 * 64;
+    private const int NumParticles = 2048 * 32;
 
     private SimulationConfig _simConfig;
     private int _numParticlesInView;
@@ -176,6 +176,8 @@ public class PartitionedParticles : MonoBehaviour {
             _particles[i] = particle;
             _partitionA.Add(region, i);
         }
+
+        Debug.LogFormat("Simulating {0} particles interacting", NumParticles);
     }
 
     private void OnDestroy() {
@@ -315,7 +317,7 @@ public class PartitionedParticles : MonoBehaviour {
         [ReadOnly] public NativeArray<velocity> forces;
 
         public void ExecuteNext(region region, int pIndex) {
-            Rng rng = new Rng(frameCount * region.x.v * region.y.v);
+            Rng rng = new Rng((uint)(1 + region.x.v + region.y.v) + frameCount * region.x.v * region.y.v);
 
             var particle = particles[pIndex];
 
